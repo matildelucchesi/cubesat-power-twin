@@ -1,0 +1,37 @@
+# Power model of a generic 1U CubeSat flying FUNcube-1's orbit.
+# The spacecraft values are representative assumptions for a 1U CubeSat,
+# not FUNcube-1 datasheet values.
+
+satellite:
+  tle_file: data/tle/funcube1.tle
+
+simulation:
+  start: "2026-11-21T00:00:00"
+  duration_days: 7
+  step_s: 30
+  eclipse_model: skyfield      # skyfield | cylindrical
+
+solar_array:
+  cell_efficiency: 0.28        # triple-junction GaAs cells
+  faces:                       # body-mounted panels: area of cells per face
+    +X: 0.0060                 # m^2 (two 30 cm^2 cells per face)
+    -X: 0.0060
+    +Y: 0.0060
+    -Y: 0.0060
+    +Z: 0.0060
+    -Z: 0.0060
+  attitude: tumbling           # tumbling | sun_pointing
+
+battery:
+  capacity_wh: 20.0            # two 18650 Li-ion cells
+  initial_soc: 0.8
+  charge_efficiency: 0.90
+  discharge_efficiency: 0.95
+
+loads:                         # average power per subsystem [W]
+  obc: 0.4                     # on-board computer
+  eps: 0.2                     # power system electronics
+  adcs: 0.3                    # attitude sensors
+  radio_rx: 0.3
+  radio_tx: 1.0                # transmitter, used duty_cycle of the time
+  radio_tx_duty_cycle: 0.5

@@ -1,0 +1,104 @@
+<header>
+  <h1>CubeSat power digital twin</h1>
+  <p class="sub">
+    {{ result()?.summary?.satellite || 'FUNCUBE-1' }} · orbit from TLE (SGP4), eclipses, solar array and battery
+  </p>
+</header>
+
+<main>
+  <form class="panel controls" (ngSubmit)="run()">
+    <h2>Scenario</h2>
+
+    <label>Days <input type="number" name="days" min="0.5" max="14" step="0.5" [(ngModel)]="request.days" /></label>
+    <label>
+      Attitude
+      <select name="attitude" [(ngModel)]="request.attitude">
+        <option value="tumbling">Tumbling</option>
+        <option value="sun_pointing">Sun pointing</option>
+      </select>
+    </label>
+    <label>
+      Eclipse model
+      <select name="eclipse_model" [(ngModel)]="request.eclipse_model">
+        <option value="skyfield">skyfield (reference)</option>
+        <option value="cylindrical">Cylindrical shadow</option>
+      </select>
+    </label>
+    <label>Battery capacity [Wh] <input type="number" name="cap" min="1" step="1" [(ngModel)]="request.capacity_wh" /></label>
+    <label>
+      Initial charge: {{ request.initial_soc | percent }}
+      <input type="range" name="soc0" min="0" max="1" step="0.05" [(ngModel)]="request.initial_soc" />
+    </label>
+    <label>
+      Transmitter duty cycle: {{ request.tx_duty_cycle | percent }}
+      <input type="range" name="duty" min="0" max="1" step="0.05" [(ngModel)]="request.tx_duty_cycle" />
+    </label>
+
+    <fieldset>
+      <legend>Failed solar panels</legend>
+      @for (face of faces; track face) {
+        <label class="check">
+          <input type="checkbox" [checked]="request.failed_faces.includes(face)"
+                 (change)="toggleFace(face, $any($event.target).checked)" />
+          {{ face }}
+        </label>
+      }
+    </fieldset>
+
+    <button type="submit" [disabled]="loading()">{{ loading() ? 'Simulating…' : 'Run simulation' }}</button>
+    @if (error()) {
+      <p class="error">{{ error() }}</p>
+    }
+  </form>
+
+  @if (result(); as r) {
+    <section class="results">
+      <div class="kpis">
+        <div class="panel kpi" [class.bad]="r.summary.min_soc < 0.3">
+          <span>Minimum charge</span><strong>{{ r.summary.min_soc | percent: '1.0-1' }}</strong>
+        </div>
+        <div class="panel kpi">
+          <span>Mean power / load</span>
+          <strong>{{ r.summary.mean_power_w | number: '1.2-2' }} / {{ r.summary.mean_load_w | number: '1.2-2' }} W</strong>
+        </div>
+        <div class="panel kpi">
+          <span>Eclipses</span><strong>{{ r.summary.eclipses }} × {{ r.summary.mean_eclipse_min }} min</strong>
+        </div>
+        <div class="panel kpi">
+          <span>Time in shadow ({{ r.summary.eclipse_model }})</span>
+          <strong>{{ r.summary.shadow_fraction | percent: '1.0-1' }}</strong>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Orbit and spacecraft, first two orbits</h2>
+        <p class="caption">Drag to rotate, scroll to zoom. The CubeSat is drawn about ten million times larger than scale.</p>
+        <app-orbit-view [result]="r" [failedFaces]="ran()?.failed_faces ?? []" [attitude]="ran()?.attitude ?? 'tumbling'" />
+      </div>
+
+      <div class="panel">
+        <h2>Battery state of charge</h2>
+        <app-line-chart [x]="r.series.hours" [series]="socSeries()" [yMax]="100" yLabel="%" xLabel="hours" title="State of charge" />
+      </div>
+      <div class="panel">
+        <h2>Power</h2>
+        <app-line-chart [x]="r.series.hours" [series]="powerSeries()" yLabel="W" xLabel="hours" title="Power" />
+      </div>
+      <div class="panel">
+        <h2>Ground track, first 24 hours</h2>
+        <app-ground-track [lat]="r.ground_track.lat" [lon]="r.ground_track.lon" />
+      </div>
+      <div class="panel">
+        <h2>Next eclipses</h2>
+        <table>
+          <thead><tr><th>Start (UTC)</th><th>Duration</th></tr></thead>
+          <tbody>
+            @for (e of r.eclipses.slice(0, 8); track e.start) {
+              <tr><td>{{ e.start | date: 'MMM d, HH:mm' : 'UTC' }}</td><td>{{ e.duration_min }} min</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+</main>
