@@ -86,7 +86,11 @@ def simulate(req: SimulationRequest) -> dict:
             "lon": np.round(df.lon_deg[first_day][::track_step], 3).tolist(),
         },
         "orbit3d": {
+            "start": df.time.iloc[0].isoformat(),
             "hours": np.round((first_orbits.time - df.time.iloc[0]).dt.total_seconds() / 3600, 4).tolist(),
+            "lat_deg": np.round(first_orbits.lat_deg, 3).tolist(),
+            "lon_deg": np.round(first_orbits.lon_deg, 3).tolist(),
+            "alt_km": np.round(first_orbits.alt_km, 1).tolist(),
             "x_km": np.round(first_orbits.x_km, 1).tolist(),
             "y_km": np.round(first_orbits.y_km, 1).tolist(),
             "z_km": np.round(first_orbits.z_km, 1).tolist(),

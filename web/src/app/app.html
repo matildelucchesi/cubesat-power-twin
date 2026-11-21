@@ -85,7 +85,6 @@
               </button>
               <input type="range" min="0" [max]="n.last" step="1" [value]="n.i" aria-label="Replay time"
                      (input)="playback.seek($any($event.target).valueAsNumber)" />
-              <span class="clock">{{ n.clock }} · <b [class.ecl]="!n.lit">{{ n.lit ? 'sunlight' : 'eclipse' }}</b></span>
               <span class="speed" role="group" aria-label="Playback speed">
                 @for (rate of rates; track rate) {
                   <button type="button" [attr.aria-pressed]="playback.rate() === rate" (click)="playback.rate.set(rate)">{{ rate }}×</button>
@@ -94,6 +93,23 @@
             </div>
           }
         </div>
+
+        @if (now(); as n) {
+          <div class="telemetry" [class.ecl]="!n.lit" aria-live="off">
+            <div class="mode"><span class="dot"></span>{{ n.lit ? 'SUNLIGHT' : 'ECLIPSE' }}</div>
+            <dl>
+              <div><dt>MET</dt><dd>{{ n.met }}</dd></div>
+              <div><dt>UTC</dt><dd>{{ n.utc }}</dd></div>
+              <div><dt>Lat</dt><dd>{{ n.lat.toFixed(1) }}°</dd></div>
+              <div><dt>Lon</dt><dd>{{ n.lon.toFixed(1) }}°</dd></div>
+              <div><dt>Alt</dt><dd>{{ n.alt.toFixed(0) }} km</dd></div>
+              <div><dt>P array</dt><dd>{{ n.power.toFixed(2) }} W</dd></div>
+              <div><dt>P net</dt><dd [class.neg]="n.net < 0">{{ n.net > 0 ? '+' : '' }}{{ n.net.toFixed(2) }} W</dd></div>
+              <div><dt>SOC</dt><dd>{{ (n.soc * 100).toFixed(1) }} %</dd></div>
+              <div class="next"><dt>{{ n.nextLabel }}</dt><dd>{{ n.next }}</dd></div>
+            </dl>
+          </div>
+        }
 
         <div class="replay">
           <div class="pane">
@@ -114,36 +130,34 @@
               Earth's shadow. Battery net power is array power minus the mean load.
             </p>
           </div>
+          <div class="pane wide">
+            <h3>Ground track</h3>
+            <app-ground-track [lat]="r.ground_track.lat" [lon]="r.ground_track.lon" [live]="live()" />
+          </div>
         </div>
       </section>
 
       <section class="two">
         <div>
           <h2>State of charge</h2>
-          <app-line-chart [x]="r.series.hours" [series]="socSeries()" [bands]="r.series.sunlit" [yMax]="100" yLabel="%" xLabel="hours" title="State of charge" />
+          <app-line-chart [x]="r.series.hours" [series]="socSeries()" [bands]="r.series.sunlit" [cursor]="now()?.t ? r.orbit3d.hours[now()!.i] : null" [yMax]="100" yLabel="%" xLabel="hours" title="State of charge" />
         </div>
         <div>
           <h2>Power</h2>
-          <app-line-chart [x]="r.series.hours" [series]="powerSeries()" yLabel="W" xLabel="hours" title="Power" />
+          <app-line-chart [x]="r.series.hours" [series]="powerSeries()" [cursor]="now() ? r.orbit3d.hours[now()!.i] : null" yLabel="W" xLabel="hours" title="Power" />
         </div>
       </section>
 
-      <section class="two">
-        <div>
-          <h2>Ground track · first 24 h</h2>
-          <app-ground-track [lat]="r.ground_track.lat" [lon]="r.ground_track.lon" />
-        </div>
-        <div>
-          <h2>Next eclipses</h2>
-          <table>
-            <thead><tr><th>Start (UTC)</th><th class="num">Duration</th></tr></thead>
-            <tbody>
-              @for (e of r.eclipses.slice(0, 8); track e.start) {
-                <tr><td>{{ e.start | date: 'MMM d, HH:mm' : 'UTC' }}</td><td class="num">{{ e.duration_min }} min</td></tr>
-              }
-            </tbody>
-          </table>
-        </div>
+      <section>
+        <h2>Next eclipses</h2>
+        <table>
+          <thead><tr><th>Start (UTC)</th><th class="num">Duration</th></tr></thead>
+          <tbody>
+            @for (e of r.eclipses.slice(0, 6); track e.start) {
+              <tr><td>{{ e.start | date: 'MMM d, HH:mm' : 'UTC' }}</td><td class="num">{{ e.duration_min }} min</td></tr>
+            }
+          </tbody>
+        </table>
       </section>
     </main>
   } @else if (loading()) {

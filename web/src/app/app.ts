@@ -3,7 +3,7 @@ import { DatePipe, PercentPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
 import { BatteryGauge } from './battery-gauge';
-import { GroundTrack } from './ground-track';
+import { GroundTrack, LiveTrack } from './ground-track';
 import { LineChart, Series } from './line-chart';
 import { OrbitPlane } from './orbit-plane';
 import { OrbitView } from './orbit-view';
@@ -116,20 +116,61 @@ export class App {
       : [];
   });
 
-  /** Values at the current replay instant. */
+  /** Values at the current replay instant: drives the telemetry strip, map, battery and 3D view. */
   readonly now = computed(() => {
     const r = this.result();
     if (!r) return null;
     const o = r.orbit3d;
     const i = Math.min(this.playback.index(), o.hours.length - 1);
     const h = o.hours[i] ?? 0;
+    const t = new Date(Date.parse(o.start) + h * 3600_000);
+
+    // Time to the next sunlight/eclipse change, searched over the whole run.
+    const s = r.series;
+    let k = s.hours.findIndex((x) => x >= h);
+    if (k < 0) k = s.hours.length - 1;
+    let j = k;
+    while (j < s.hours.length && s.sunlit[j] === s.sunlit[k]) j++;
+    const nextMin = j < s.hours.length ? (s.hours[j] - h) * 60 : null;
+
     return {
       i,
       last: o.hours.length - 1,
-      clock: `T + ${Math.floor(h)} h ${String(Math.floor((h % 1) * 60)).padStart(2, '0')} min`,
+      met: `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}`,
+      utc: t.toISOString().slice(11, 16),
       lit: o.sunlit[i],
       soc: o.soc[i],
+      power: o.power_w[i],
       net: o.power_w[i] - r.summary.mean_load_w,
+      lat: o.lat_deg[i],
+      lon: o.lon_deg[i],
+      alt: o.alt_km[i],
+      next: nextMin === null ? '—' : `${String(Math.floor(nextMin)).padStart(2, '0')}:${String(Math.round((nextMin % 1) * 60) % 60).padStart(2, '0')}`,
+      nextLabel: o.sunlit[i] ? 'Eclipse in' : 'Sunlight in',
+      t,
+    };
+  });
+
+  /** Map overlay: satellite, 30-minute trail, sub-solar point. */
+  readonly live = computed<LiveTrack | null>(() => {
+    const r = this.result();
+    const n = this.now();
+    if (!r || !n) return null;
+    const o = r.orbit3d;
+    const from = Math.max(0, n.i - 30);
+    const [sx, sy, sz] = o.sun_dir;
+    // Sub-solar longitude = Sun right ascension - Greenwich sidereal time.
+    const jd = n.t.getTime() / 86400_000 + 2440587.5;
+    const gmst = 280.46061837 + 360.98564736629 * (jd - 2451545.0);
+    return {
+      lat: n.lat,
+      lon: n.lon,
+      altKm: n.alt,
+      trailLat: o.lat_deg.slice(from, n.i + 1),
+      trailLon: o.lon_deg.slice(from, n.i + 1),
+      sunLat: (Math.asin(sz / Math.hypot(sx, sy, sz)) * 180) / Math.PI,
+      sunLon: (Math.atan2(sy, sx) * 180) / Math.PI - gmst,
+      lit: n.lit,
     };
   });
 

@@ -23,6 +23,9 @@ def test_simulate_returns_series_and_summary():
     assert body["ground_track"]["lat"]
     assert len(body["orbit3d"]["x_km"]) == len(body["orbit3d"]["sunlit"]) > 0
     assert len(body["orbit3d"]["sun_dir"]) == 3
+    o = body["orbit3d"]
+    assert len(o["lat_deg"]) == len(o["lon_deg"]) == len(o["alt_km"]) == len(o["hours"])
+    assert all(-90 <= v <= 90 for v in o["lat_deg"]) and "T" in o["start"]
 
 
 def test_failed_faces_reduce_power():

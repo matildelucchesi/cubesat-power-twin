@@ -25,6 +25,9 @@ export interface Series {
       @for (s of series(); track s.label) {
         <polyline [attr.points]="points(s.values)" [attr.stroke]="s.color" fill="none" stroke-width="1.6" />
       }
+      @if (cursor() !== null) {
+        <line [attr.x1]="x(cursor()!)" [attr.x2]="x(cursor()!)" [attr.y1]="pad.top" [attr.y2]="height - pad.bottom" class="cursor" />
+      }
       <text [attr.x]="pad.left" y="14" class="axis">{{ yLabel() }}</text>
       <text [attr.x]="width - pad.right" [attr.y]="height - 8" text-anchor="end" class="axis">{{ xLabel() }}</text>
     </svg>
@@ -41,6 +44,7 @@ export interface Series {
     svg { width: 100%; height: auto; display: block; }
     .grid { stroke: var(--grid); }
     .band { fill: var(--shade); }
+    .cursor { stroke: var(--sun); stroke-width: 1.5; }
     .tick { font: 10px var(--f-data); fill: var(--muted); }
     .axis { font: 11px var(--f-data); fill: var(--muted); }
     .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted); margin-top: 4px; }
@@ -57,6 +61,8 @@ export class LineChart {
   readonly xLabel = input('');
   /** Optional sunlit flags, one per x value: eclipses are drawn as shaded bands. */
   readonly bands = input<boolean[] | null>(null);
+  /** Optional replay instant [h], drawn as a vertical line. */
+  readonly cursor = input<number | null>(null);
 
   readonly width = 720;
   readonly height = 240;

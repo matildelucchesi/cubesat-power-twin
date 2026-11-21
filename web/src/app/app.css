@@ -55,9 +55,6 @@ main { display: flex; flex-direction: column; gap: 28px; padding: 22px clamp(16p
 .replay-head h2 { margin: 0; }
 .player { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; flex: 1 1 420px; justify-content: flex-end; }
 .player input { flex: 1 1 160px; min-width: 120px; accent-color: var(--accent); }
-.clock { font: 12px var(--f-data); color: var(--muted); font-variant-numeric: tabular-nums; min-width: 190px; }
-.clock b { font-weight: 600; color: var(--sun); }
-.clock b.ecl { color: var(--text); }
 .ghost { font: 500 12px var(--f-body); background: var(--panel); color: var(--text); border: 1px solid var(--border); padding: 5px 12px; cursor: pointer; }
 .speed { display: inline-flex; }
 .speed button { font: 500 12px var(--f-data); background: var(--panel); color: var(--text); border: 1px solid var(--border); padding: 5px 9px; cursor: pointer; margin-left: -1px; }
@@ -75,3 +72,26 @@ table { width: 100%; border-collapse: collapse; font: 13px var(--f-data); backgr
 th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--grid); }
 th { color: var(--muted); font: 600 11px var(--f-body); text-transform: uppercase; letter-spacing: 0.05em; background: var(--panel-2); }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Telemetry strip: the one dark band on the page, like a console readout. */
+.telemetry {
+  display: flex; flex-wrap: wrap; align-items: stretch; margin-bottom: 14px;
+  background: var(--text); color: var(--panel); font-family: var(--f-data);
+}
+.telemetry .mode {
+  display: flex; align-items: center; gap: 8px; padding: 10px 16px; font-weight: 600; font-size: 13px;
+  letter-spacing: 0.08em; background: var(--sun); color: var(--text); transition: background-color 0.4s;
+}
+.telemetry.ecl .mode { background: #2a3a55; color: var(--panel); }
+.telemetry .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: blink 1.4s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .telemetry .dot { animation: none; } .telemetry .mode { transition: none; } }
+.telemetry dl { display: flex; flex-wrap: wrap; margin: 0; flex: 1; }
+.telemetry dl > div { padding: 7px 14px; border-left: 1px solid #26354d; min-width: 0; }
+.telemetry dt { font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: #8d9ab0; }
+.telemetry dd { margin: 2px 0 0; font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.telemetry dd.neg { color: #ff8a7a; }
+.telemetry .next { margin-left: auto; }
+.telemetry .next dd { color: var(--sun); font-weight: 600; }
+.telemetry.ecl .next dd { color: #9fd3ff; }
+.pane.wide { grid-column: 1 / -1; }

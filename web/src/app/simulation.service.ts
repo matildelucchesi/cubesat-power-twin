@@ -33,7 +33,11 @@ export interface SimulationResult {
   series: { hours: number[]; power_w: number[]; load_w: number[]; soc: number[]; sunlit: boolean[] };
   ground_track: { lat: number[]; lon: number[] };
   orbit3d: {
+    start: string;
     hours: number[];
+    lat_deg: number[];
+    lon_deg: number[];
+    alt_km: number[];
     x_km: number[];
     y_km: number[];
     z_km: number[];
