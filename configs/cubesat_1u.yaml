@@ -23,7 +23,7 @@ solar_array:
   attitude: tumbling           # tumbling | sun_pointing
 
 battery:
-  capacity_wh: 20.0            # two 18650 Li-ion cells
+  capacity_wh: 19.2            # two 18650 Li-ion cells, 9.6 Wh each
   initial_soc: 0.8
   charge_efficiency: 0.90
   discharge_efficiency: 0.95

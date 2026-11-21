@@ -5,6 +5,7 @@
 }
 .eyebrow { margin: 0 0 6px; font: 600 11px var(--f-body); letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
 h1 { margin: 0; font: 800 clamp(22px, 3vw, 32px) / 1.1 var(--f-display); letter-spacing: -0.02em; text-wrap: balance; }
+.scenario { margin: 6px 0 0; font: 500 15px var(--f-body); color: var(--muted); }
 .meta { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; font: 12px var(--f-data); color: var(--muted); }
 
 .body { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: calc(100vh - 90px); }
