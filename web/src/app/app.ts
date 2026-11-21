@@ -201,8 +201,8 @@ export class App {
     return this.catalog()?.satellites.find((s) => s.norad === norad)?.name ?? r.summary.satellite;
   });
 
-  /** Page title: what is simulated (a CubeSat) and whose orbit it flies. */
-  readonly title = computed(() => {
+  /** Subtitle: what the current run simulates (a CubeSat) and whose orbit it flies. */
+  readonly scenario = computed(() => {
     const q = this.ran();
     const ff = q?.form_factor ?? '1U';
     return `${ff} CubeSat on the ${this.orbitName()} orbit`;
