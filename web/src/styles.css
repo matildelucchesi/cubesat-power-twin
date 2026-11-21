@@ -1,21 +1,34 @@
+/* Mission-report look: light, strict grid, data in a monospace face. */
 :root {
-  --bg: #0b1020;
-  --panel: #131a2e;
-  --panel-2: #0f1526;
-  --border: #243052;
-  --grid: #243052;
-  --text: #e6e9f2;
-  --muted: #94a0bf;
-  --accent: #4c8dff;
-  --warn: #f2a33a;
-  --good: #3ccf8e;
-  --danger: #ff5c6c;
-  color-scheme: dark;
+  --bg: #fbfcfd;
+  --panel: #ffffff;
+  --panel-2: #f3f6f9;
+  --border: #dbe1ea;
+  --grid: #edf1f6;
+  --text: #0f1b2d;
+  --muted: #56637a;
+  --accent: #0e6e8c;
+  --on-accent: #ffffff;
+  --sun: #d08a12;
+  --shade: #dde5ee;
+  --good: #1f7a4a;
+  --mid: #c98a0b;
+  --danger: #c0392b;
+  --canvas: #f6f8fb;
+  --earth-day: #f3f6f9;
+  --earth-night: #d3dce7;
+  --shade-3d: #b8c2cf;
+  --f-display: 'Archivo', 'Inter', system-ui, sans-serif;
+  --f-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-data: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  color-scheme: light;
 }
 * { box-sizing: border-box; }
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--f-body);
+  font-size: 14px;
 }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

@@ -1,104 +1,221 @@
-<header>
-  <h1>CubeSat power digital twin</h1>
-  <p class="sub">
-    {{ result()?.summary?.satellite || 'FUNCUBE-1' }} · orbit from TLE (SGP4), eclipses, solar array and battery
+<header class="top">
+  <div>
+    <p class="eyebrow">Mission analysis · electrical power</p>
+    <h1>{{ result()?.summary?.satellite || 'FUNCUBE-1 (AO-73)' }} · {{ ran()?.form_factor || '1U' }} power budget</h1>
+  </div>
+  <p class="meta">
+    <span>Orbit from TLE · SGP4</span>
+    @if (ranAt(); as t) { <span>Run {{ t | date: 'MMM d, HH:mm' }}</span> }
   </p>
 </header>
 
-<main>
-  <form class="panel controls" (ngSubmit)="run()">
-    <h2>Scenario</h2>
+<div class="body">
+  <form class="side" (ngSubmit)="run()">
+    <h2>Spacecraft</h2>
 
-    <label>Days <input type="number" name="days" min="0.5" max="14" step="0.5" [(ngModel)]="request.days" /></label>
-    <label>
-      Attitude
-      <select name="attitude" [(ngModel)]="request.attitude">
+    <label for="orbit">Orbit
+      <select id="orbit" name="orbit" [ngModel]="orbitMode() === 'custom' ? 'custom' : '' + request.norad"
+              (ngModelChange)="setOrbit($event)">
+        @for (s of catalog()?.satellites ?? [{ norad: 39444, name: 'FUNcube-1 (AO-73)', orbit: '' }]; track s.norad) {
+          <option [value]="'' + s.norad">{{ s.name }}</option>
+        }
+        <option value="custom">Other NORAD number…</option>
+      </select>
+      @if (orbitMode() === 'preset') {
+        @for (s of catalog()?.satellites ?? []; track s.norad) {
+          @if (s.norad === request.norad) { <span class="hint">{{ s.orbit }}</span> }
+        }
+      }
+    </label>
+    @if (orbitMode() === 'custom') {
+      <label for="norad">NORAD catalog number
+        <input id="norad" type="number" name="norad" min="1" max="999999" [(ngModel)]="request.norad" />
+        <span class="hint">The TLE is downloaded from CelesTrak.</span>
+      </label>
+    }
+
+    <div class="field">
+      <span class="lbl">Form factor</span>
+      <div class="seg" role="group" aria-label="Form factor">
+        @for (ff of formFactors; track ff) {
+          <button type="button" [attr.aria-pressed]="request.form_factor === ff" (click)="setFormFactor(ff)">{{ ff }}</button>
+        }
+      </div>
+    </div>
+    <label class="check" for="deploy">
+      <input id="deploy" type="checkbox" name="deploy" [(ngModel)]="request.deployables" />
+      Deployable solar panels
+    </label>
+
+    <h2 class="sub">Scenario</h2>
+
+    <label for="days">Days
+      <input id="days" type="number" name="days" min="0.5" max="14" step="0.5" [(ngModel)]="request.days" />
+    </label>
+    <label for="attitude">Attitude
+      <select id="attitude" name="attitude" [(ngModel)]="request.attitude">
         <option value="tumbling">Tumbling</option>
         <option value="sun_pointing">Sun pointing</option>
       </select>
     </label>
-    <label>
-      Eclipse model
-      <select name="eclipse_model" [(ngModel)]="request.eclipse_model">
+    <label for="eclipse">Eclipse model
+      <select id="eclipse" name="eclipse_model" [(ngModel)]="request.eclipse_model">
         <option value="skyfield">skyfield (reference)</option>
         <option value="cylindrical">Cylindrical shadow</option>
       </select>
     </label>
-    <label>Battery capacity [Wh] <input type="number" name="cap" min="1" step="1" [(ngModel)]="request.capacity_wh" /></label>
-    <label>
-      Initial charge: {{ request.initial_soc | percent }}
-      <input type="range" name="soc0" min="0" max="1" step="0.05" [(ngModel)]="request.initial_soc" />
+    <label for="cap">Battery capacity [Wh]
+      <input id="cap" type="number" name="cap" min="1" step="1" [(ngModel)]="request.capacity_wh" />
     </label>
-    <label>
-      Transmitter duty cycle: {{ request.tx_duty_cycle | percent }}
-      <input type="range" name="duty" min="0" max="1" step="0.05" [(ngModel)]="request.tx_duty_cycle" />
+    <label for="soc0">Initial charge <b>{{ request.initial_soc | percent }}</b>
+      <input id="soc0" type="range" name="soc0" min="0" max="1" step="0.05" [(ngModel)]="request.initial_soc" />
+    </label>
+    <label for="duty">Transmitter duty cycle <b>{{ request.tx_duty_cycle | percent }}</b>
+      <input id="duty" type="range" name="duty" min="0" max="1" step="0.05" [(ngModel)]="request.tx_duty_cycle" />
     </label>
 
     <fieldset>
       <legend>Failed solar panels</legend>
       @for (face of faces; track face) {
-        <label class="check">
-          <input type="checkbox" [checked]="request.failed_faces.includes(face)"
+        <label class="check" [for]="'f' + face">
+          <input type="checkbox" [id]="'f' + face" [checked]="request.failed_faces.includes(face)"
                  (change)="toggleFace(face, $any($event.target).checked)" />
           {{ face }}
         </label>
       }
     </fieldset>
 
-    <button type="submit" [disabled]="loading()">{{ loading() ? 'Simulating…' : 'Run simulation' }}</button>
+    <button type="submit" class="run" [disabled]="loading()">{{ loading() ? 'Simulating…' : 'Run simulation' }}</button>
     @if (error()) {
       <p class="error">{{ error() }}</p>
     }
   </form>
 
   @if (result(); as r) {
-    <section class="results">
-      <div class="kpis">
-        <div class="panel kpi" [class.bad]="r.summary.min_soc < 0.3">
-          <span>Minimum charge</span><strong>{{ r.summary.min_soc | percent: '1.0-1' }}</strong>
+    <main>
+      <section>
+        <div class="results-head">
+          <h2>Computed results</h2>
+          <div class="baseline">
+            @if (baseline(); as b) {
+              <span class="chip ref">Baseline · {{ b.label }}</span>
+              <button type="button" class="ghost" (click)="baseline.set(null)">Clear</button>
+            }
+            <button type="button" class="ghost" (click)="saveBaseline()">{{ baseline() ? 'Replace baseline' : 'Set as baseline' }}</button>
+          </div>
         </div>
-        <div class="panel kpi">
-          <span>Mean power / load</span>
-          <strong>{{ r.summary.mean_power_w | number: '1.2-2' }} / {{ r.summary.mean_load_w | number: '1.2-2' }} W</strong>
+        @if (r.spacecraft; as sc) {
+          <p class="sc-line">
+            NORAD {{ sc.norad }} · i = {{ sc.inclination_deg.toFixed(1) }}° · TLE epoch {{ sc.tle_epoch | date: 'MMM d, HH:mm' : 'UTC' }} UTC
+            ({{ sc.tle_source === 'celestrak' ? 'downloaded from CelesTrak' : sc.tle_source === 'cache' ? 'cached' : 'bundled, offline' }})
+            · {{ sc.form_factor }}{{ sc.deployables ? ' with wings' : '' }} · cells {{ (sc.cell_area_m2 * 1e4).toFixed(0) }} cm²
+          </p>
+        }
+        <div class="cards">
+          @for (c of cards(); track c.label) {
+            <article class="card">
+              <span class="k">{{ c.label }}</span>
+              <span class="v">{{ c.value }}<small>{{ c.unit }}</small></span>
+              <code class="eq">{{ c.formula }}</code>
+              @if (c.delta; as d) {
+                <span class="delta" [class.good]="d.good === true" [class.bad]="d.good === false">{{ d.text }}</span>
+              }
+              <span class="chips">
+                @for (chip of c.chips; track chip.text) {
+                  <span class="chip" [class]="chip.tone">{{ chip.text }}</span>
+                }
+              </span>
+            </article>
+          }
         </div>
-        <div class="panel kpi">
-          <span>Eclipses</span><strong>{{ r.summary.eclipses }} × {{ r.summary.mean_eclipse_min }} min</strong>
-        </div>
-        <div class="panel kpi">
-          <span>Time in shadow ({{ r.summary.eclipse_model }})</span>
-          <strong>{{ r.summary.shadow_fraction | percent: '1.0-1' }}</strong>
-        </div>
-      </div>
+      </section>
 
-      <div class="panel">
-        <h2>Orbit and spacecraft, first two orbits</h2>
-        <p class="caption">Drag to rotate, scroll to zoom. The CubeSat is drawn about ten million times larger than scale.</p>
-        <app-orbit-view [result]="r" [failedFaces]="ran()?.failed_faces ?? []" [attitude]="ran()?.attitude ?? 'tumbling'" />
-      </div>
+      <section>
+        <div class="replay-head">
+          <h2>Orbit replay · first two orbits</h2>
+          @if (now(); as n) {
+            <div class="player">
+              <button type="button" class="ghost" (click)="playback.playing.set(!playback.playing())">
+                {{ playback.playing() ? 'Pause' : 'Play' }}
+              </button>
+              <input type="range" min="0" [max]="n.last" step="1" [value]="n.i" aria-label="Replay time"
+                     (input)="playback.seek($any($event.target).valueAsNumber)" />
+              <span class="speed" role="group" aria-label="Playback speed">
+                @for (rate of rates; track rate) {
+                  <button type="button" [attr.aria-pressed]="playback.rate() === rate" (click)="playback.rate.set(rate)">{{ rate }}×</button>
+                }
+              </span>
+            </div>
+          }
+        </div>
 
-      <div class="panel">
-        <h2>Battery state of charge</h2>
-        <app-line-chart [x]="r.series.hours" [series]="socSeries()" [yMax]="100" yLabel="%" xLabel="hours" title="State of charge" />
-      </div>
-      <div class="panel">
-        <h2>Power</h2>
-        <app-line-chart [x]="r.series.hours" [series]="powerSeries()" yLabel="W" xLabel="hours" title="Power" />
-      </div>
-      <div class="panel">
-        <h2>Ground track, first 24 hours</h2>
-        <app-ground-track [lat]="r.ground_track.lat" [lon]="r.ground_track.lon" />
-      </div>
-      <div class="panel">
+        @if (now(); as n) {
+          <div class="telemetry" [class.ecl]="!n.lit" aria-live="off">
+            <div class="mode"><span class="dot"></span>{{ n.lit ? 'SUNLIGHT' : 'ECLIPSE' }}</div>
+            <dl>
+              <div><dt>MET</dt><dd>{{ n.met }}</dd></div>
+              <div><dt>UTC</dt><dd>{{ n.utc }}</dd></div>
+              <div><dt>Lat</dt><dd>{{ n.lat.toFixed(1) }}°</dd></div>
+              <div><dt>Lon</dt><dd>{{ n.lon.toFixed(1) }}°</dd></div>
+              <div><dt>Alt</dt><dd>{{ n.alt.toFixed(0) }} km</dd></div>
+              <div><dt>P array</dt><dd>{{ n.power.toFixed(2) }} W</dd></div>
+              <div><dt>P net</dt><dd [class.neg]="n.net < 0">{{ n.net > 0 ? '+' : '' }}{{ n.net.toFixed(2) }} W</dd></div>
+              <div><dt>SOC</dt><dd>{{ (n.soc * 100).toFixed(1) }} %</dd></div>
+              <div class="next"><dt>{{ n.nextLabel }}</dt><dd>{{ n.next }}</dd></div>
+            </dl>
+          </div>
+        }
+
+        <div class="replay">
+          <div class="pane">
+            <h3>3D view</h3>
+            <app-orbit-view [result]="r" [failedFaces]="ran()?.failed_faces ?? []" [attitude]="ran()?.attitude ?? 'tumbling'" />
+            <p class="cap">The CubeSat is drawn far larger than scale so its faces can be read.</p>
+          </div>
+          <div class="pane">
+            <h3>Orbit geometry</h3>
+            <div class="geo">
+              <app-orbit-plane [result]="r" />
+              @if (now(); as n) {
+                <app-battery-gauge [soc]="n.soc" [net]="n.net" />
+              }
+            </div>
+            <p class="cap">
+              Seen from the orbit normal with the Sun to the right. The thick arc is where the orbit crosses the
+              Earth's shadow. Battery net power is array power minus the mean load.
+            </p>
+          </div>
+          <div class="pane wide">
+            <h3>Ground track</h3>
+            <app-ground-track [lat]="r.ground_track.lat" [lon]="r.ground_track.lon" [live]="live()" />
+          </div>
+        </div>
+      </section>
+
+      <section class="two">
+        <div>
+          <h2>State of charge</h2>
+          <app-line-chart [x]="r.series.hours" [series]="socSeries()" [bands]="r.series.sunlit" [ghosts]="socGhosts()" [cursor]="now()?.t ? r.orbit3d.hours[now()!.i] : null" [yMax]="100" yLabel="%" xLabel="hours" title="State of charge" />
+        </div>
+        <div>
+          <h2>Power</h2>
+          <app-line-chart [x]="r.series.hours" [series]="powerSeries()" [ghosts]="powerGhosts()" [cursor]="now() ? r.orbit3d.hours[now()!.i] : null" yLabel="W" xLabel="hours" title="Power" />
+        </div>
+      </section>
+
+      <section>
         <h2>Next eclipses</h2>
         <table>
-          <thead><tr><th>Start (UTC)</th><th>Duration</th></tr></thead>
+          <thead><tr><th>Start (UTC)</th><th class="num">Duration</th></tr></thead>
           <tbody>
-            @for (e of r.eclipses.slice(0, 8); track e.start) {
-              <tr><td>{{ e.start | date: 'MMM d, HH:mm' : 'UTC' }}</td><td>{{ e.duration_min }} min</td></tr>
+            @for (e of r.eclipses.slice(0, 6); track e.start) {
+              <tr><td>{{ e.start | date: 'MMM d, HH:mm' : 'UTC' }}</td><td class="num">{{ e.duration_min }} min</td></tr>
             }
           </tbody>
         </table>
-      </div>
-    </section>
+      </section>
+    </main>
+  } @else if (loading()) {
+    <main><p class="empty">Propagating the orbit and simulating the battery…</p></main>
   }
-</main>
+</div>

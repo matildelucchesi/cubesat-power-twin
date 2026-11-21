@@ -1,0 +1,21 @@
+# Representative CubeSat form factors (assumptions, not a specific mission).
+# faces: cell area per body face [m^2]; deployable: extra one-sided panel area
+# that is added when deployable panels are selected.
+1U:
+  size_u: [1, 1, 1]          # body size along X, Y, Z in units of 10 cm
+  faces: {+X: 0.006, -X: 0.006, +Y: 0.006, -Y: 0.006, +Z: 0.006, -Z: 0.006}
+  deployable: 0.024          # four 10 x 10 cm panels, partly covered with cells
+  capacity_wh: 20
+  loads: {obc: 0.4, eps: 0.2, adcs: 0.3, radio_rx: 0.3, radio_tx: 1.0}
+3U:
+  size_u: [1, 1, 3]
+  faces: {+X: 0.018, -X: 0.018, +Y: 0.018, -Y: 0.018, +Z: 0.006, -Z: 0.006}
+  deployable: 0.072          # two wings of two 10 x 30 cm panels
+  capacity_wh: 40
+  loads: {obc: 0.4, eps: 0.3, adcs: 0.8, radio_rx: 0.4, radio_tx: 2.0, payload: 1.5}
+6U:
+  size_u: [2, 1, 3]
+  faces: {+X: 0.036, -X: 0.036, +Y: 0.018, -Y: 0.018, +Z: 0.012, -Z: 0.012}
+  deployable: 0.144          # two wings of two 20 x 30 cm panels
+  capacity_wh: 80
+  loads: {obc: 0.5, eps: 0.4, adcs: 1.5, radio_rx: 0.5, radio_tx: 4.0, payload: 4.0}

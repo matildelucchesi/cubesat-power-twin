@@ -8,14 +8,18 @@ import copy
 from functools import lru_cache
 from typing import Literal
 
+from datetime import timedelta
+
 import numpy as np
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from eclipse import find_eclipses, sun_direction
 from simulation import load_config, run, summary
+from tle import PRESETS, Tle, TleUnavailable, get_tle
 
 CONFIG_PATH = "configs/cubesat_1u.yaml"
+FORM_FACTORS_PATH = "configs/form_factors.yaml"
 FACES = ["+X", "-X", "+Y", "-Y", "+Z", "-Z"]
 
 app = FastAPI(title="CubeSat power digital twin",
@@ -24,6 +28,9 @@ app = FastAPI(title="CubeSat power digital twin",
 
 class SimulationRequest(BaseModel):
     """Parameters the operator can change; everything else comes from the config."""
+    norad: int = Field(39444, ge=1, le=999999, description="NORAD catalog number of the orbit to fly")
+    form_factor: Literal["1U", "3U", "6U"] = "1U"
+    deployables: bool = Field(False, description="Add deployable solar panels")
     days: float = Field(3, gt=0, le=14, description="Simulated time span [days]")
     step_s: int = Field(60, ge=10, le=600, description="Time step [s]")
     attitude: Literal["tumbling", "sun_pointing"] = "tumbling"
@@ -39,16 +46,27 @@ def base_config() -> dict:
     return load_config(CONFIG_PATH)
 
 
-def build_config(req: SimulationRequest) -> dict:
-    """Apply the request on top of the YAML config."""
+@lru_cache
+def form_factors() -> dict:
+    return load_config(FORM_FACTORS_PATH)
+
+
+def build_config(req: SimulationRequest, tle: Tle) -> dict:
+    """Apply the request on top of the YAML config. The simulation starts at
+    the first whole hour after the TLE epoch, where SGP4 is most accurate."""
     cfg = copy.deepcopy(base_config())
-    cfg["simulation"].update(duration_days=req.days, step_s=req.step_s,
+    ff = form_factors()[req.form_factor]
+    start = (tle.epoch + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0, tzinfo=None)
+    cfg["satellite"]["tle_lines"] = (tle.name, tle.line1, tle.line2)
+    cfg["simulation"].update(start=start.isoformat(), duration_days=req.days, step_s=req.step_s,
                              eclipse_model=req.eclipse_model)
+    cfg["solar_array"]["faces"] = dict(ff["faces"])
+    cfg["solar_array"]["deployable"] = ff["deployable"] if req.deployables else 0.0
     cfg["solar_array"]["attitude"] = req.attitude
+    cfg["loads"] = {**ff["loads"], "radio_tx_duty_cycle": req.tx_duty_cycle}
     for face in req.failed_faces:
         cfg["solar_array"]["faces"][face] = 0.0
     cfg["battery"].update(capacity_wh=req.capacity_wh, initial_soc=req.initial_soc)
-    cfg["loads"]["radio_tx_duty_cycle"] = req.tx_duty_cycle
     return cfg
 
 
@@ -58,11 +76,22 @@ def get_config() -> dict:
     return base_config()
 
 
+@app.get("/api/catalog")
+def catalog() -> dict:
+    """Orbit presets and spacecraft form factors the operator can choose from."""
+    return {"satellites": PRESETS, "form_factors": form_factors()}
+
+
 @app.post("/api/simulate")
 def simulate(req: SimulationRequest) -> dict:
     """Run a simulation and return summary figures, time series and the
     ground track of the first orbit day."""
-    df = run(build_config(req))
+    try:
+        tle = get_tle(req.norad)
+    except TleUnavailable as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    cfg = build_config(req, tle)
+    df = run(cfg)
     hours = (df.time - df.time.iloc[0]).dt.total_seconds() / 3600
     first_day = hours <= 24
     track_step = max(1, 60 // req.step_s)  # about one ground-track point per minute
@@ -72,8 +101,19 @@ def simulate(req: SimulationRequest) -> dict:
     first_orbits = df[hours <= 3.2].iloc[::max(1, 60 // req.step_s)]
     sun = sun_direction(df.time.iloc[[0]])[0]
 
+    ff = form_factors()[req.form_factor]
     return {
         "summary": summary(df),
+        "spacecraft": {
+            "norad": tle.norad,
+            "tle_source": tle.source,
+            "tle_epoch": tle.epoch.isoformat(),
+            "inclination_deg": tle.inclination_deg,
+            "form_factor": req.form_factor,
+            "size_u": ff["size_u"],
+            "deployables": req.deployables,
+            "cell_area_m2": round(sum(cfg["solar_array"]["faces"].values()) + cfg["solar_array"]["deployable"], 4),
+        },
         "series": {
             "hours": np.round(hours, 4).tolist(),
             "power_w": np.round(df.power_w, 3).tolist(),
@@ -86,7 +126,11 @@ def simulate(req: SimulationRequest) -> dict:
             "lon": np.round(df.lon_deg[first_day][::track_step], 3).tolist(),
         },
         "orbit3d": {
+            "start": df.time.iloc[0].isoformat(),
             "hours": np.round((first_orbits.time - df.time.iloc[0]).dt.total_seconds() / 3600, 4).tolist(),
+            "lat_deg": np.round(first_orbits.lat_deg, 3).tolist(),
+            "lon_deg": np.round(first_orbits.lon_deg, 3).tolist(),
+            "alt_km": np.round(first_orbits.alt_km, 1).tolist(),
             "x_km": np.round(first_orbits.x_km, 1).tolist(),
             "y_km": np.round(first_orbits.y_km, 1).tolist(),
             "z_km": np.round(first_orbits.z_km, 1).tolist(),

@@ -4,7 +4,12 @@ import { Observable } from 'rxjs';
 
 export type Face = '+X' | '-X' | '+Y' | '-Y' | '+Z' | '-Z';
 
+export type FormFactor = '1U' | '3U' | '6U';
+
 export interface SimulationRequest {
+  norad: number;
+  form_factor: FormFactor;
+  deployables: boolean;
   days: number;
   step_s: number;
   attitude: 'tumbling' | 'sun_pointing';
@@ -28,12 +33,33 @@ export interface SimulationSummary {
   final_soc: number;
 }
 
+export interface Spacecraft {
+  norad: number;
+  tle_source: 'celestrak' | 'cache' | 'bundled';
+  tle_epoch: string;
+  inclination_deg: number;
+  form_factor: FormFactor;
+  size_u: number[];
+  deployables: boolean;
+  cell_area_m2: number;
+}
+
+export interface Catalog {
+  satellites: { norad: number; name: string; orbit: string }[];
+  form_factors: Record<FormFactor, { size_u: number[]; capacity_wh: number; deployable: number }>;
+}
+
 export interface SimulationResult {
   summary: SimulationSummary;
+  spacecraft?: Spacecraft;
   series: { hours: number[]; power_w: number[]; load_w: number[]; soc: number[]; sunlit: boolean[] };
   ground_track: { lat: number[]; lon: number[] };
   orbit3d: {
+    start: string;
     hours: number[];
+    lat_deg: number[];
+    lon_deg: number[];
+    alt_km: number[];
     x_km: number[];
     y_km: number[];
     z_km: number[];
@@ -49,6 +75,10 @@ export interface SimulationResult {
 @Injectable({ providedIn: 'root' })
 export class SimulationService {
   private readonly http = inject(HttpClient);
+
+  catalog(): Observable<Catalog> {
+    return this.http.get<Catalog>('/api/catalog');
+  }
 
   simulate(request: SimulationRequest): Observable<SimulationResult> {
     return this.http.post<SimulationResult>('/api/simulate', request);

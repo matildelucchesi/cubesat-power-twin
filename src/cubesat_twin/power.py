@@ -15,24 +15,25 @@ def solar_irradiance(times: pd.Series) -> np.ndarray:
     return SOLAR_CONSTANT_W_M2 * (1 + 0.033 * np.cos(2 * np.pi * (day_of_year - 3) / 365.25))
 
 
-def effective_area(faces: dict[str, float], attitude: str) -> float:
+def effective_area(faces: dict[str, float], attitude: str, deployable: float = 0.0) -> float:
     """Cell area facing the Sun on average [m^2].
 
-    - sun_pointing: the largest face points at the Sun (best case).
-    - tumbling: random orientation. Averaged over all directions, a flat face
-      sees the Sun with max(0, cos(angle)) = 1/4, so the mean area is the
-      total cell area divided by 4.
+    - sun_pointing: the largest body face points at the Sun, and deployable
+      panels are mounted parallel to it (best case).
+    - tumbling: random orientation. Averaged over all directions, a flat
+      one-sided panel sees the Sun with max(0, cos(angle)) = 1/4, so the mean
+      area is the total cell area (body and deployable) divided by 4.
     """
     areas = list(faces.values())
     if attitude == "sun_pointing":
-        return max(areas)
+        return max(areas) + deployable
     if attitude == "tumbling":
-        return sum(areas) / 4
+        return (sum(areas) + deployable) / 4
     raise ValueError(f"unknown attitude: {attitude}")
 
 
 def generated_power(times: pd.Series, sunlit, faces: dict[str, float],
-                    efficiency: float, attitude: str) -> np.ndarray:
+                    efficiency: float, attitude: str, deployable: float = 0.0) -> np.ndarray:
     """Electrical power from the solar array [W] at each time step."""
-    area = effective_area(faces, attitude)
+    area = effective_area(faces, attitude, deployable)
     return np.asarray(sunlit, dtype=float) * solar_irradiance(times) * efficiency * area
