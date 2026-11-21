@@ -31,6 +31,29 @@ def plot_ground_track(df: pd.DataFrame, path: str, title: str = "") -> None:
     plt.close(fig)
 
 
+def plot_sunlight(df: pd.DataFrame, path: str, title: str = "",
+                  hours: float = 6) -> None:
+    """Sole (1) o ombra (0) nel tempo, per i due modelli di eclissi."""
+    h = (df.time - df.time.iloc[0]).dt.total_seconds() / 3600
+    window = h <= hours
+
+    fig, ax = plt.subplots(figsize=(10, 3))
+    ax.step(h[window], df.sunlit[window].astype(int), where="post",
+            label="skyfield")
+    if "sunlit_cyl" in df:
+        ax.step(h[window], df.sunlit_cyl[window].astype(int) * 0.95,
+                where="post", linestyle="--", label="cilindrico")
+    ax.set_yticks([0, 1], ["ombra", "sole"])
+    ax.set_xlabel("Ore dall'inizio")
+    ax.set_title(title or "Sole e ombra")
+    ax.grid(alpha=0.3)
+    ax.legend(loc="lower right")
+
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     from datetime import datetime
 

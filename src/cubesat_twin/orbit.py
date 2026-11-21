@@ -16,8 +16,10 @@ def read_tle(path: str) -> tuple[str, str, str]:
 
 
 def propagate(name: str, line1: str, line2: str,
-              start: datetime, duration_s: float, step_s: float) -> pd.DataFrame:
-    """Restituisce un DataFrame con colonne: time, lat_deg, lon_deg, alt_km."""
+              start: datetime, duration_s: float, step_s: float,
+              eph=None) -> pd.DataFrame:
+    """Restituisce un DataFrame con colonne: time, lat_deg, lon_deg, alt_km,
+    x_km, y_km, z_km (posizione inerziale GCRS) e, se si passa eph, sunlit."""
     ts = load.timescale()
     satellite = EarthSatellite(line1, line2, name, ts)
     seconds = np.arange(0, duration_s, step_s)
@@ -31,8 +33,16 @@ def propagate(name: str, line1: str, line2: str,
         "time": t.utc_datetime(),
         "lat_deg": latitude,
         "lon_deg": longitude,
-        "alt_km": altitude
+        "alt_km": altitude,
     })
+    # Posizione nel sistema inerziale GCRS (centrato nella Terra, assi fissi
+    # rispetto alle stelle): serve per eclissi e potenza dei pannelli.
+    x, y, z = satellite_position.position.km
+    df["x_km"], df["y_km"], df["z_km"] = x, y, z
+
+    if eph is not None:
+        # Modello di skyfield: True se il satellite vede il Sole.
+        df["sunlit"] = satellite_position.is_sunlit(eph)
     return df
 
 
