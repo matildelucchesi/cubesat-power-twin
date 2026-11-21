@@ -146,6 +146,31 @@ export class App {
     return b ? [{ label: `Baseline array · ${b.label}`, x: b.result.series.hours, values: b.result.series.power_w, color: 'var(--muted)' }] : [];
   });
 
+  /** Chart zoom: 'orbit' = one orbital period, otherwise hours; null shows the whole run. */
+  readonly zoom = signal<'orbit' | 6 | 24 | null>('orbit');
+  readonly zoomStart = signal(0);
+  readonly zoomSpan = computed(() => {
+    const z = this.zoom();
+    if (z === null) return null;
+    return z === 'orbit' ? (this.periodMin() ?? 95) / 60 : z;
+  });
+  readonly runHours = computed(() => {
+    const h = this.result()?.series.hours ?? [];
+    return h[h.length - 1] ?? 0;
+  });
+  readonly chartWindow = computed<[number, number] | null>(() => {
+    const span = this.zoomSpan();
+    if (span === null || span >= this.runHours()) return null;
+    const start = Math.min(this.zoomStart(), this.runHours() - span);
+    return [start, start + span];
+  });
+
+  setZoom(z: 'orbit' | 6 | 24 | null): void {
+    this.zoom.set(z);
+    const span = this.zoomSpan();
+    if (span !== null) this.zoomStart.set(Math.min(this.zoomStart(), Math.max(0, this.runHours() - span)));
+  }
+
   /** Name of the orbit the CubeSat flies: the preset name, or the TLE name for a custom NORAD number. */
   readonly orbitName = computed(() => {
     const r = this.result();
@@ -183,14 +208,14 @@ export class App {
 
   readonly socSeries = computed<Series[]>(() => {
     const r = this.result();
-    return r ? [{ label: 'State of charge', values: r.series.soc.map((s) => s * 100), color: 'var(--accent)' }] : [];
+    return r ? [{ label: 'State of charge', values: r.series.soc.map((s) => s * 100), color: 'var(--accent)', unit: '%' }] : [];
   });
   readonly powerSeries = computed<Series[]>(() => {
     const r = this.result();
     return r
       ? [
-          { label: 'Solar array', values: r.series.power_w, color: 'var(--sun)' },
-          { label: 'Load', values: r.series.load_w, color: 'var(--text)' },
+          { label: 'Solar array', values: r.series.power_w, color: 'var(--sun)', unit: 'W' },
+          { label: 'Load', values: r.series.load_w, color: 'var(--text)', unit: 'W' },
         ]
       : [];
   });
