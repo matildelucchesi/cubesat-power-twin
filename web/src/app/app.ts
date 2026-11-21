@@ -57,6 +57,9 @@ export class App {
     initial_soc: 0.8,
     tx_duty_cycle: 0.5,
     eclipse_model: 'skyfield',
+    safe_mode: false,
+    safe_enter_soc: 0.4,
+    safe_exit_soc: 0.6,
   };
 
   readonly result = signal<SimulationResult | null>(null);
@@ -126,7 +129,26 @@ export class App {
         }],
       },
     ];
+    cards.push(
+      {
+        label: 'Final state of charge', value: (s.final_soc * 100).toFixed(1), unit: '%',
+        formula: `SOC at T + ${s.days} d`,
+        chips: [{ text: s.final_soc >= (q.initial_soc - 0.01) ? 'not below start' : 'below start', tone: s.final_soc >= q.initial_soc - 0.01 ? 'ok' : 'warn' }],
+      },
+      q.safe_mode
+        ? {
+            label: 'Time in safe mode', value: (s.safe_fraction * 100).toFixed(1), unit: '%',
+            formula: `${s.safe_entries} entries · in < ${Math.round(q.safe_enter_soc * 100)} %, out > ${Math.round(q.safe_exit_soc * 100)} %`,
+            chips: [{ text: 'TX and payload off in safe mode' }],
+          }
+        : {
+            label: 'Time in safe mode', value: 'off', unit: '',
+            formula: 'controller disabled',
+            chips: [{ text: 'enable it under Scenario' }],
+          },
+    );
     if (b) {
+      cards[6].delta = delta(s.final_soc * 100, b.final_soc * 100, 'pt', 1, true);
       cards[0].delta = delta(s.mean_power_w, b.mean_power_w, 'W', 2, true);
       cards[1].delta = delta(s.mean_load_w, b.mean_load_w, 'W', 2, false);
       cards[2].delta = delta(margin, b.mean_power_w - b.mean_load_w, 'W', 2, true);
@@ -192,8 +214,19 @@ export class App {
     const q = this.ran();
     if (!r || !q) return '';
     return q.eclipse_model === 'skyfield' && r.summary.eclipse_model === 'cylindrical'
-      ? 'cylindrical (skyfield ephemeris unavailable)'
+      ? 'cylindrical (skyfield fallback)'
       : r.summary.eclipse_model;
+  });
+
+  /** Controller thresholds drawn on the state-of-charge chart. */
+  readonly socMarks = computed(() => {
+    const q = this.ran();
+    return q?.safe_mode
+      ? [
+          { y: q.safe_exit_soc * 100, label: `exit safe mode > ${Math.round(q.safe_exit_soc * 100)} %`, color: 'var(--good)' },
+          { y: q.safe_enter_soc * 100, label: `enter safe mode < ${Math.round(q.safe_enter_soc * 100)} %`, color: 'var(--danger)', below: true },
+        ]
+      : [];
   });
 
   /** Short description of the current run, used as the baseline label. */
@@ -203,6 +236,7 @@ export class App {
     if (!r || !q) return '';
     const parts = [`${q.form_factor}${q.deployables ? ' + wings' : ''} on ${this.orbitName()} orbit`, q.attitude === 'tumbling' ? 'tumbling' : 'sun pointing'];
     if (q.failed_faces.length) parts.push(`${q.failed_faces.length} failed`);
+    if (q.safe_mode) parts.push('safe mode');
     return parts.join(' · ');
   });
 
@@ -243,9 +277,10 @@ export class App {
       elapsed: `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}`,
       utc: t.toISOString().slice(11, 16),
       lit: o.sunlit[i],
+      safe: o.safe?.[i] ?? false,
       soc: o.soc[i],
       power: o.power_w[i],
-      net: o.power_w[i] - r.summary.mean_load_w,
+      net: o.power_w[i] - (o.load_w?.[i] ?? r.summary.mean_load_w),
       lat: o.lat_deg[i],
       lon: o.lon_deg[i],
       alt: o.alt_km[i],

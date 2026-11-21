@@ -86,6 +86,27 @@
       }
     </fieldset>
 
+    <fieldset class="safe-box">
+      <legend>On-board safe mode</legend>
+      <label class="check" for="safe">
+        <input id="safe" type="checkbox" name="safe" [(ngModel)]="request.safe_mode" />
+        Shed load when the battery is low
+      </label>
+      @if (request.safe_mode) {
+        <label for="enter">Enter below <b>{{ request.safe_enter_soc | percent }}</b>
+          <input id="enter" type="range" name="enter" min="0.1" max="0.8" step="0.05" [(ngModel)]="request.safe_enter_soc" />
+        </label>
+        <label for="exit">Leave above <b>{{ request.safe_exit_soc | percent }}</b>
+          <input id="exit" type="range" name="exit" min="0.2" max="0.95" step="0.05" [(ngModel)]="request.safe_exit_soc" />
+        </label>
+        @if (request.safe_enter_soc >= request.safe_exit_soc) {
+          <span class="hint warn">The exit threshold must be above the entry threshold.</span>
+        } @else {
+          <span class="hint">Transmitter and payload switch off; the receiver stays on for commands.</span>
+        }
+      }
+    </fieldset>
+
     <button type="submit" class="run" [disabled]="loading()">{{ loading() ? 'Simulating…' : 'Run simulation' }}</button>
     @if (error()) {
       <p class="error">{{ error() }}</p>
@@ -153,6 +174,7 @@
         @if (now(); as n) {
           <div class="telemetry" [class.ecl]="!n.lit" aria-live="off">
             <div class="mode"><span class="dot"></span>{{ n.lit ? 'SUNLIGHT' : 'ECLIPSE' }}</div>
+            @if (n.safe) { <div class="mode safe-pill">SAFE MODE</div> }
             <dl>
               <div><dt>Elapsed</dt><dd>{{ n.elapsed }}</dd></div>
               <div><dt>UTC</dt><dd>{{ n.utc }}</dd></div>
@@ -220,14 +242,14 @@
         </div>
         <div class="chart-block">
           <h3>Battery state of charge</h3>
-          <p class="cap cap-top">Charge stored in the battery, in % of capacity. It rises in sunlight and falls during each eclipse (shaded). Hover for values.</p>
-          <app-line-chart [x]="r.series.hours" [series]="socSeries()" [bands]="r.series.sunlit" [ghosts]="socGhosts()"
+          <p class="cap cap-top">Charge stored in the battery, in % of capacity. It rises in sunlight and falls during each eclipse (shaded). With safe mode on, the dashed lines are the controller thresholds and the red strip marks when it is active. Hover for values.</p>
+          <app-line-chart [x]="r.series.hours" [series]="socSeries()" [bands]="r.series.sunlit" [safe]="ran()?.safe_mode ? r.series.safe : null" [marks]="socMarks()" [ghosts]="socGhosts()"
                           [cursor]="now() ? r.orbit3d.hours[now()!.i] : null" [window]="chartWindow()" [yFit]="true" [yMax]="100"
                           yLabel="SOC [%]" xLabel="time since start of run [h]" title="Battery state of charge" />
         </div>
         <div class="chart-block">
           <h3>Power generated and consumed</h3>
-          <p class="cap cap-top">Solar array output drops to zero in eclipse. When it is above the load line the battery charges.</p>
+          <p class="cap cap-top">Solar array output drops to zero in eclipse. When it is above the load line the battery charges. In safe mode the load steps down.</p>
           <app-line-chart [x]="r.series.hours" [series]="powerSeries()" [bands]="r.series.sunlit" [ghosts]="powerGhosts()"
                           [cursor]="now() ? r.orbit3d.hours[now()!.i] : null" [window]="chartWindow()"
                           yLabel="Power [W]" xLabel="time since start of run [h]" title="Power generated and consumed" />

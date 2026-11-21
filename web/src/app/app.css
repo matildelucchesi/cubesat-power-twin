@@ -36,7 +36,7 @@ legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
 main { display: flex; flex-direction: column; gap: 28px; padding: 22px clamp(16px, 3vw, 32px) 40px; min-width: 0; }
 .empty { color: var(--muted); }
 
-.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 @media (max-width: 1100px) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 520px) { .cards { grid-template-columns: 1fr; } }
 .card { background: var(--panel); border: 1px solid var(--border); padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
@@ -128,3 +128,9 @@ th { color: var(--muted); font: 600 11px var(--f-body); text-transform: uppercas
 .pan input { width: 180px; accent-color: var(--accent); }
 .chart-block { background: var(--panel); border: 1px solid var(--border); padding: 14px; }
 .cap-top { margin: 0 0 8px; }
+
+.safe-box { grid-template-columns: 1fr; gap: 10px; }
+.side .safe-box label:not(.check) { font-size: 12px; }
+.check input#safe { accent-color: var(--accent); }
+.hint.warn { color: var(--danger); }
+.telemetry .safe-pill { background: var(--danger); color: var(--panel); }

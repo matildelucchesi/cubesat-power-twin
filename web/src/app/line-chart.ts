@@ -28,6 +28,9 @@ export interface Ghost extends Series {
         @for (b of bandRects(); track $index) {
           <rect [attr.x]="b.x" [attr.y]="pad.top" [attr.width]="b.w" [attr.height]="plotH" class="band" />
         }
+        @for (b of safeRects(); track $index) {
+          <rect [attr.x]="b.x" [attr.y]="height - pad.bottom - 6" [attr.width]="b.w" height="6" class="safe" />
+        }
       </g>
       @for (tick of yTicks(); track tick) {
         <line [attr.x1]="pad.left" [attr.x2]="width - pad.right" [attr.y1]="y(tick)" [attr.y2]="y(tick)" class="grid" />
@@ -44,6 +47,10 @@ export interface Ghost extends Series {
         }
         @for (s of series(); track s.label) {
           <polyline [attr.points]="points(s.values)" [attr.stroke]="s.color" fill="none" stroke-width="1.8" stroke-linejoin="round" />
+        }
+        @for (m of marks(); track m.label) {
+          <line [attr.x1]="pad.left" [attr.x2]="width - pad.right" [attr.y1]="y(m.y)" [attr.y2]="y(m.y)" [attr.stroke]="m.color" stroke-dasharray="6 4" stroke-width="1.2" />
+          <text [attr.x]="width - pad.right - 4" [attr.y]="y(m.y) + (m.below ? 13 : -4)" text-anchor="end" class="mark" [attr.fill]="m.color">{{ m.label }}</text>
         }
         @if (cursor() !== null) {
           <line [attr.x1]="x(cursor()!)" [attr.x2]="x(cursor()!)" [attr.y1]="pad.top" [attr.y2]="height - pad.bottom" class="cursor" />
@@ -75,6 +82,9 @@ export interface Ghost extends Series {
       @if (bands()) {
         <span><i class="sw"></i>Eclipse</span>
       }
+      @if (safeRects().length) {
+        <span><i class="sf"></i>Safe mode active</span>
+      }
       @if (cursor() !== null) {
         <span><i class="cur"></i>Replay instant</span>
       }
@@ -86,6 +96,8 @@ export interface Ghost extends Series {
     .grid { stroke: var(--grid); }
     .axisline { stroke: var(--muted); stroke-width: 1; }
     .band { fill: var(--shade); }
+    .safe { fill: var(--danger); opacity: 0.8; }
+    .mark { font: 10px var(--f-data); }
     .cursor { stroke: var(--sun); stroke-width: 1.5; }
     .hover { stroke: var(--text); stroke-width: 1; stroke-dasharray: 2 3; }
     .dot { stroke: var(--panel); stroke-width: 1.5; }
@@ -98,6 +110,7 @@ export interface Ghost extends Series {
     .legend i { display: inline-block; width: 12px; height: 3px; margin-right: 6px; vertical-align: middle; }
     .legend i.dash { background: none !important; height: 0; border-top: 2px dashed; opacity: 0.7; }
     .legend i.sw { width: 12px; height: 10px; background: var(--shade); }
+    .legend i.sf { width: 12px; height: 6px; background: var(--danger); }
     .legend i.cur { width: 2px; height: 12px; background: var(--sun); }
   `,
 })
@@ -118,6 +131,10 @@ export class LineChart {
   readonly ghosts = input<Ghost[]>([]);
   /** Optional replay instant [h], drawn as a vertical line. */
   readonly cursor = input<number | null>(null);
+  /** Optional safe-mode flags, one per x value: drawn as a red strip on the time axis. */
+  readonly safe = input<boolean[] | null>(null);
+  /** Horizontal reference lines (e.g. controller thresholds). */
+  readonly marks = input<{ y: number; label: string; color: string; below?: boolean }[]>([]);
   /** Visible x range [h]; null shows everything. */
   readonly window = input<[number, number] | null>(null);
 
@@ -152,6 +169,7 @@ export class LineChart {
     const [i0, i1] = this.visible();
     const vals = this.series().flatMap((s) => s.values.slice(i0, i1));
     const [a, b] = this.range();
+    for (const m of this.marks()) vals.push(m.y);
     for (const g of this.ghosts()) g.values.forEach((v, k) => { if (g.x[k] >= a && g.x[k] <= b) vals.push(v); });
     let hi = vals.length ? vals.reduce((m, v) => (v > m ? v : m), -Infinity) : 1;
     let lo = vals.length ? vals.reduce((m, v) => (v < m ? v : m), Infinity) : 0;
@@ -180,10 +198,14 @@ export class LineChart {
     return ticks;
   });
 
-  readonly bandRects = computed(() => {
-    const lit = this.bands();
+  readonly bandRects = computed(() => this.runs(this.bands(), false));
+  readonly safeRects = computed(() => this.runs(this.safe(), true));
+
+  /** Rectangles for the runs of samples where flags[i] === value, inside the window. */
+  private runs(flags: boolean[] | null, value: boolean): { x: number; w: number }[] {
     const xs = this.x_values();
-    if (!lit) return [];
+    if (!flags) return [];
+    const lit = flags.map((f) => f !== value); // reuse the eclipse logic: runs where lit[i] is false
     const [i0, i1] = this.visible();
     const rects: { x: number; w: number }[] = [];
     let start = -1;
@@ -196,7 +218,7 @@ export class LineChart {
       }
     }
     return rects;
-  });
+  }
 
   readonly readout = computed(() => {
     const hx = this.hoverX();

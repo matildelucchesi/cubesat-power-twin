@@ -18,6 +18,9 @@ export interface SimulationRequest {
   initial_soc: number;
   tx_duty_cycle: number;
   eclipse_model: 'skyfield' | 'cylindrical';
+  safe_mode: boolean;
+  safe_enter_soc: number;
+  safe_exit_soc: number;
 }
 
 export interface SimulationSummary {
@@ -31,6 +34,8 @@ export interface SimulationSummary {
   mean_load_w: number;
   min_soc: number;
   final_soc: number;
+  safe_fraction: number;
+  safe_entries: number;
 }
 
 export interface Spacecraft {
@@ -52,7 +57,7 @@ export interface Catalog {
 export interface SimulationResult {
   summary: SimulationSummary;
   spacecraft?: Spacecraft;
-  series: { hours: number[]; power_w: number[]; load_w: number[]; soc: number[]; sunlit: boolean[] };
+  series: { hours: number[]; power_w: number[]; load_w: number[]; soc: number[]; sunlit: boolean[]; safe: boolean[] };
   ground_track: { lat: number[]; lon: number[] };
   orbit3d: {
     start: string;
@@ -66,6 +71,8 @@ export interface SimulationResult {
     sunlit: boolean[];
     power_w: number[];
     soc: number[];
+    load_w: number[];
+    safe: boolean[];
     sun_dir: [number, number, number];
   };
   eclipses: { start: string; duration_min: number }[];
