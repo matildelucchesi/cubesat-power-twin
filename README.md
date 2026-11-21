@@ -51,6 +51,11 @@ The dashboard is built to compare scenarios, not to show a single case.
   (representative areas, batteries and loads in `configs/form_factors.yaml`).
 - **Baseline**: save a run as baseline; the next runs show the difference on every result card and
   overlay the baseline on the charts.
+- **Safe mode**: an on-board controller with hysteresis switches the transmitter and payload off
+  when the state of charge drops below a threshold (40 % by default) and back on above a higher one
+  (60 %). With three failed panels the battery is flat after about two days without it; with it the
+  minimum stays at 39 % and the spacecraft spends 64 % of the week in safe mode
+  (`src/cubesat_twin/safe_mode.py`).
 - **Replay**: telemetry strip, 3D view with a close-up of the lit faces, to-scale orbit plane,
   battery gauge and live ground track all follow one clock (60×, 300× or 1000× real time).
 

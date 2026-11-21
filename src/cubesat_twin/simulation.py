@@ -7,7 +7,8 @@ import yaml
 
 from battery import simulate_battery
 from eclipse import find_eclipses, sunlit_cylindrical
-from loads import load_profile
+from loads import average_load, load_profile, safe_mode_load
+from safe_mode import simulate_with_safe_mode
 from orbit import propagate, read_tle
 from power import generated_power
 
@@ -46,12 +47,20 @@ def run(config: dict) -> pd.DataFrame:
     df["power_w"] = generated_power(df.time, df.sunlit, array["faces"],
                                     array["cell_efficiency"], array["attitude"],
                                     array.get("deployable", 0.0))
-    df["load_w"] = load_profile(len(df), config["loads"])
-
     bat = config["battery"]
-    df["soc"] = simulate_battery(df.power_w, df.load_w, sim["step_s"],
-                                 bat["capacity_wh"], bat["initial_soc"],
-                                 bat["charge_efficiency"], bat["discharge_efficiency"])
+    safe = config.get("safe_mode", {})
+    if safe.get("enabled"):
+        df["soc"], df["load_w"], df["safe"] = simulate_with_safe_mode(
+            df.power_w, average_load(config["loads"]), safe_mode_load(config["loads"]),
+            sim["step_s"], bat["capacity_wh"], bat["initial_soc"],
+            bat["charge_efficiency"], bat["discharge_efficiency"],
+            safe.get("enter_soc", 0.4), safe.get("exit_soc", 0.6))
+    else:
+        df["load_w"] = load_profile(len(df), config["loads"])
+        df["soc"] = simulate_battery(df.power_w, df.load_w, sim["step_s"],
+                                     bat["capacity_wh"], bat["initial_soc"],
+                                     bat["charge_efficiency"], bat["discharge_efficiency"])
+        df["safe"] = False
     df.attrs["name"] = name
     df.attrs["eclipse_model"] = model
     return df
@@ -71,6 +80,8 @@ def summary(df: pd.DataFrame) -> dict:
         "mean_load_w": round(float(df.load_w.mean()), 2),
         "min_soc": round(float(df.soc.min()), 3),
         "final_soc": round(float(df.soc.iloc[-1]), 3),
+        "safe_fraction": round(float(df.safe.mean()), 3) if "safe" in df else 0.0,
+        "safe_entries": int((df.safe.astype(int).diff() == 1).sum() + int(df.safe.iloc[0])) if "safe" in df else 0,
     }
 
 

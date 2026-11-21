@@ -16,3 +16,13 @@ def average_load(loads: dict[str, float]) -> float:
 def load_profile(n_steps: int, loads: dict[str, float]) -> np.ndarray:
     """Power consumption at each time step [W] (constant average for now)."""
     return np.full(n_steps, average_load(loads))
+
+
+# Loads switched off in safe mode: the transmitter and the payload. The
+# receiver stays on so that the ground can still send commands.
+SHED_IN_SAFE_MODE = ("radio_tx", "radio_tx_duty_cycle", "payload")
+
+
+def safe_mode_load(loads: dict[str, float]) -> float:
+    """Average power consumption in safe mode [W]."""
+    return sum(v for k, v in loads.items() if k not in SHED_IN_SAFE_MODE)

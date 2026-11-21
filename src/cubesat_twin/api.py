@@ -12,7 +12,7 @@ from datetime import timedelta
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from eclipse import find_eclipses, sun_direction
 from simulation import load_config, run, summary
@@ -39,6 +39,15 @@ class SimulationRequest(BaseModel):
     initial_soc: float = Field(0.8, ge=0, le=1)
     tx_duty_cycle: float = Field(0.5, ge=0, le=1, description="Transmitter on-time fraction")
     eclipse_model: Literal["skyfield", "cylindrical"] = "skyfield"
+    safe_mode: bool = Field(False, description="Enable the on-board safe-mode controller")
+    safe_enter_soc: float = Field(0.4, ge=0, le=1, description="Enter safe mode below this SOC")
+    safe_exit_soc: float = Field(0.6, ge=0, le=1, description="Leave safe mode above this SOC")
+
+    @model_validator(mode="after")
+    def thresholds_ordered(self):
+        if self.safe_enter_soc >= self.safe_exit_soc:
+            raise ValueError("safe_enter_soc must be lower than safe_exit_soc (hysteresis)")
+        return self
 
 
 @lru_cache
@@ -64,6 +73,8 @@ def build_config(req: SimulationRequest, tle: Tle) -> dict:
     cfg["solar_array"]["deployable"] = ff["deployable"] if req.deployables else 0.0
     cfg["solar_array"]["attitude"] = req.attitude
     cfg["loads"] = {**ff["loads"], "radio_tx_duty_cycle": req.tx_duty_cycle}
+    cfg["safe_mode"] = {"enabled": req.safe_mode, "enter_soc": req.safe_enter_soc,
+                        "exit_soc": req.safe_exit_soc}
     for face in req.failed_faces:
         cfg["solar_array"]["faces"][face] = 0.0
     cfg["battery"].update(capacity_wh=req.capacity_wh, initial_soc=req.initial_soc)
@@ -120,6 +131,7 @@ def simulate(req: SimulationRequest) -> dict:
             "load_w": np.round(df.load_w, 3).tolist(),
             "soc": np.round(df.soc, 4).tolist(),
             "sunlit": df.sunlit.astype(bool).tolist(),
+            "safe": df.safe.astype(bool).tolist(),
         },
         "ground_track": {
             "lat": np.round(df.lat_deg[first_day][::track_step], 3).tolist(),
@@ -137,6 +149,8 @@ def simulate(req: SimulationRequest) -> dict:
             "sunlit": first_orbits.sunlit.astype(bool).tolist(),
             "power_w": np.round(first_orbits.power_w, 3).tolist(),
             "soc": np.round(first_orbits.soc, 4).tolist(),
+            "load_w": np.round(first_orbits.load_w, 3).tolist(),
+            "safe": first_orbits.safe.astype(bool).tolist(),
             "sun_dir": np.round(sun, 5).tolist(),
         },
         "eclipses": [
