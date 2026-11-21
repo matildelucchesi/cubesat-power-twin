@@ -158,6 +158,8 @@ export class OrbitView implements AfterViewInit, OnDestroy {
   private readonly insetSunArrow = new THREE.Group();
   private readonly insetMaterials = FACES.map(() => new THREE.MeshStandardMaterial({ roughness: 0.6 }));
   private readonly insetWingMaterial = new THREE.MeshStandardMaterial({ roughness: 0.5 });
+  /** One label sprite per body face in the close-up, in FACES order. */
+  private readonly labelMaterials = FACES.map((f) => new THREE.SpriteMaterial({ map: labelTexture(f), depthTest: true, transparent: true }));
   private readonly dynamic = new THREE.Group(); // rebuilt when the result changes
 
   constructor() {
@@ -166,6 +168,7 @@ export class OrbitView implements AfterViewInit, OnDestroy {
       const size = sc?.size_u ?? [1, 1, 1];
       this.buildBody(this.sat, this.cubeMaterials, this.wingMaterial, size, sc?.deployables ?? false, 0.12);
       this.buildBody(this.insetSat, this.insetMaterials, this.insetWingMaterial, size, sc?.deployables ?? false, 1);
+      this.addFaceLabels(this.insetSat, size, 1);
       this.buildDynamic();
     });
     effect(() => this.updateSatellite());
@@ -328,6 +331,8 @@ export class OrbitView implements AfterViewInit, OnDestroy {
         m.emissive.copy(row.failed ? new THREE.Color(0) : lit).multiplyScalar(row.failed ? 0 : row.factor * 0.8);
       }
     });
+    const failedSet = new Set(this.failedFaces());
+    FACES.forEach((f, k) => this.labelMaterials[k].color.set(failedSet.has(f) ? 0xff6b5e : 0xffffff));
     for (const m of [this.wingMaterial, this.insetWingMaterial]) {
       m.color.copy(panel);
       m.emissive.copy(lit).multiplyScalar(this.wingFactor() * 0.8);
@@ -359,4 +364,38 @@ export class OrbitView implements AfterViewInit, OnDestroy {
       group.add(wing, outline);
     }
   }
+
+  /** Face names (+X ... -Z) floating just outside each face; they turn with the body. */
+  private addFaceLabels(group: THREE.Group, sizeU: number[], longest: number): void {
+    const k = longest / Math.max(...sizeU);
+    const half = sizeU.map((u) => (u * k) / 2);
+    NORMALS.forEach((n, i) => {
+      const sprite = new THREE.Sprite(this.labelMaterials[i]);
+      const axis = i >> 1; // 0: X, 1: Y, 2: Z
+      sprite.position.copy(n).multiplyScalar(half[axis] + 0.2);
+      sprite.scale.set(0.44, 0.22, 1);
+      sprite.renderOrder = 2;
+      group.add(sprite);
+    });
+  }
+}
+
+/** Small dark tag with the face name, drawn on a canvas. */
+function labelTexture(text: string): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 64;
+  const g = c.getContext('2d')!;
+  g.fillStyle = 'rgba(15, 27, 45, 0.85)';
+  g.beginPath();
+  g.roundRect(4, 8, 120, 48, 10);
+  g.fill();
+  g.fillStyle = '#ffffff';
+  g.font = '600 30px "JetBrains Mono", monospace';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text.replace('-', '\u2212'), 64, 33);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
