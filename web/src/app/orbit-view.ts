@@ -44,11 +44,10 @@ function cssColor(name: string, fallback: string): THREE.Color {
         <span><i class="cyl"></i>Earth's shadow</span>
       </div>
       <span class="hint-3d">Drag to rotate · scroll to zoom</span>
-      <div class="inset-frame" aria-hidden="true"><span>Close-up · faces lit by the Sun</span></div>
     </div>
     <div class="faces-head">
       <h3>Sunlight on each face</h3>
-      <span>cos θ between face normal and Sun · {{ attitude() === 'sun_pointing' ? '+X kept on the Sun' : 'tumbling, illustrative attitude' }}</span>
+      <span>cos θ between face normal and Sun · {{ attitude() === 'sun_pointing' ? '+X kept on the Sun' : 'tumbling: this rotation is illustrative, the power model uses the average (A/4)' }}</span>
     </div>
     <ul class="faces">
       @for (f of faceRows(); track f.face) {
@@ -77,8 +76,6 @@ function cssColor(name: string, fallback: string): THREE.Color {
     .legend .shade { background: var(--text); }
     .legend .cyl { background: var(--shade-3d); height: 8px; }
     .hint-3d { position: absolute; right: 10px; top: 8px; font: 11px var(--f-data); color: var(--muted); }
-    .inset-frame { position: absolute; right: 10px; bottom: 10px; width: 34%; aspect-ratio: 1; border: 1px solid var(--border); pointer-events: none; }
-    .inset-frame span { position: absolute; left: 6px; top: 4px; font: 10px var(--f-data); color: var(--muted); }
     .faces-head { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; }
     h3 { margin: 0; font-size: 12px; font-weight: 600; }
     .faces-head span { font-size: 11px; color: var(--muted); }
@@ -95,6 +92,8 @@ export class OrbitView implements AfterViewInit, OnDestroy {
   readonly result = input.required<SimulationResult>();
   readonly failedFaces = input<Face[]>([]);
   readonly attitude = input<'tumbling' | 'sun_pointing'>('tumbling');
+  /** Canvas elsewhere on the page where the close-up of the CubeSat is drawn. */
+  readonly closeupCanvas = input<HTMLCanvasElement | null>(null);
 
   private readonly canvas = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
 
@@ -150,7 +149,8 @@ export class OrbitView implements AfterViewInit, OnDestroy {
   private readonly cubeMaterials = FACES.map(() => new THREE.MeshStandardMaterial({ roughness: 0.6 }));
   private readonly wingMaterial = new THREE.MeshStandardMaterial({ roughness: 0.5 });
 
-  // Close-up inset: the same spacecraft in its own scene, camera fixed near the Sun line.
+  // Close-up: the same spacecraft in its own scene and renderer, camera fixed near the Sun line.
+  private closeRenderer?: THREE.WebGLRenderer;
   private readonly insetScene = new THREE.Scene();
   private readonly insetCamera = new THREE.PerspectiveCamera(32, 1, 0.01, 20);
   private readonly insetSat = new THREE.Group();
@@ -209,6 +209,7 @@ export class OrbitView implements AfterViewInit, OnDestroy {
     window.removeEventListener('resize', this.resize);
     this.controls?.dispose();
     this.renderer?.dispose();
+    this.closeRenderer?.dispose();
   }
 
   private readonly resize = () => {
@@ -224,20 +225,21 @@ export class OrbitView implements AfterViewInit, OnDestroy {
     this.controls?.update();
     const r = this.renderer;
     if (!r) return;
-    const c = this.canvas().nativeElement;
-    r.setViewport(0, 0, c.clientWidth, c.clientHeight);
     r.render(this.scene, this.camera);
 
-    // Inset in the bottom-right corner (viewport origin is bottom-left).
-    const size = Math.round(c.clientWidth * 0.34);
-    r.setScissorTest(true);
-    r.setScissor(c.clientWidth - size - 10, 10, size, size);
-    r.setViewport(c.clientWidth - size - 10, 10, size, size);
-    r.setClearColor(0xffffff, 1);
-    r.clear();
-    r.render(this.insetScene, this.insetCamera);
-    r.setScissorTest(false);
-    r.setClearColor(0x000000, 0);
+    const cc = this.closeupCanvas();
+    if (cc && !this.closeRenderer) {
+      this.closeRenderer = new THREE.WebGLRenderer({ canvas: cc, antialias: true, alpha: true });
+      this.closeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    }
+    if (cc && this.closeRenderer) {
+      if (cc.width !== Math.round(cc.clientWidth * this.closeRenderer.getPixelRatio())) {
+        this.closeRenderer.setSize(cc.clientWidth, cc.clientHeight, false);
+        this.insetCamera.aspect = cc.clientWidth / cc.clientHeight;
+        this.insetCamera.updateProjectionMatrix();
+      }
+      this.closeRenderer.render(this.insetScene, this.insetCamera);
+    }
   };
 
   /** Sun light, shadow cylinder and orbit line: they depend on the result only. */
@@ -254,7 +256,7 @@ export class OrbitView implements AfterViewInit, OnDestroy {
     const camDir = sun.clone().multiplyScalar(Math.cos(55 * Math.PI / 180))
       .add(perp.multiplyScalar(Math.sin(55 * Math.PI / 180)))
       .add(new THREE.Vector3(0, 0.35, 0)).normalize();
-    this.insetCamera.position.copy(camDir.multiplyScalar(4.6));
+    this.insetCamera.position.copy(camDir.multiplyScalar(4.2));
     this.insetCamera.lookAt(0, 0, 0);
     this.insetSunArrow.clear();
     this.insetSunArrow.add(new THREE.ArrowHelper(sun, sun.clone().multiplyScalar(0.85), 0.55, cssColor('--sun', '#d08a12').getHex(), 0.18, 0.1));

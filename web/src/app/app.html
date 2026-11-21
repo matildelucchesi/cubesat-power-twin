@@ -1,7 +1,7 @@
 <header class="top">
   <div>
-    <p class="eyebrow">Mission analysis · electrical power</p>
-    <h1>{{ result()?.summary?.satellite || 'FUNCUBE-1 (AO-73)' }} · {{ ran()?.form_factor || '1U' }} power budget</h1>
+    <p class="eyebrow">Mission analysis · CubeSat electrical power</p>
+    <h1>{{ title() }}</h1>
   </div>
   <p class="meta">
     <span>Orbit from TLE · SGP4</span>
@@ -13,7 +13,7 @@
   <form class="side" (ngSubmit)="run()">
     <h2>Spacecraft</h2>
 
-    <label for="orbit">Orbit
+    <label for="orbit">Fly the orbit of
       <select id="orbit" name="orbit" [ngModel]="orbitMode() === 'custom' ? 'custom' : '' + request.norad"
               (ngModelChange)="setOrbit($event)">
         @for (s of catalog()?.satellites ?? [{ norad: 39444, name: 'FUNcube-1 (AO-73)', orbit: '' }]; track s.norad) {
@@ -23,19 +23,19 @@
       </select>
       @if (orbitMode() === 'preset') {
         @for (s of catalog()?.satellites ?? []; track s.norad) {
-          @if (s.norad === request.norad) { <span class="hint">{{ s.orbit }}</span> }
+          @if (s.norad === request.norad) { <span class="hint">{{ s.orbit }}. Only the orbit is used.</span> }
         }
       }
     </label>
     @if (orbitMode() === 'custom') {
       <label for="norad">NORAD catalog number
         <input id="norad" type="number" name="norad" min="1" max="999999" [(ngModel)]="request.norad" />
-        <span class="hint">The TLE is downloaded from CelesTrak.</span>
+        <span class="hint">Only this object's orbit (TLE from CelesTrak) is used; the spacecraft is still the CubeSat below.</span>
       </label>
     }
 
     <div class="field">
-      <span class="lbl">Form factor</span>
+      <span class="lbl">CubeSat form factor</span>
       <div class="seg" role="group" aria-label="Form factor">
         @for (ff of formFactors; track ff) {
           <button type="button" [attr.aria-pressed]="request.form_factor === ff" (click)="setFormFactor(ff)">{{ ff }}</button>
@@ -46,6 +46,7 @@
       <input id="deploy" type="checkbox" name="deploy" [(ngModel)]="request.deployables" />
       Deployable solar panels
     </label>
+    <span class="hint">Cell areas, battery and loads are representative values for each size, not a specific mission.</span>
 
     <h2 class="sub">Scenario</h2>
 
@@ -106,9 +107,9 @@
         </div>
         @if (r.spacecraft; as sc) {
           <p class="sc-line">
-            NORAD {{ sc.norad }} · i = {{ sc.inclination_deg.toFixed(1) }}° · TLE epoch {{ sc.tle_epoch | date: 'MMM d, HH:mm' : 'UTC' }} UTC
+            Orbit of NORAD {{ sc.norad }} ({{ r.summary.satellite }}) · i = {{ sc.inclination_deg.toFixed(1) }}° · TLE epoch {{ sc.tle_epoch | date: 'MMM d, HH:mm' : 'UTC' }} UTC
             ({{ sc.tle_source === 'celestrak' ? 'downloaded from CelesTrak' : sc.tle_source === 'cache' ? 'cached' : 'bundled, offline' }})
-            · {{ sc.form_factor }}{{ sc.deployables ? ' with wings' : '' }} · cells {{ (sc.cell_area_m2 * 1e4).toFixed(0) }} cm²
+            · spacecraft: {{ sc.form_factor }} CubeSat{{ sc.deployables ? ' with deployable panels' : '' }} · solar cells {{ (sc.cell_area_m2 * 1e4).toFixed(0) }} cm²
           </p>
         }
         <div class="cards">
@@ -132,7 +133,7 @@
 
       <section>
         <div class="replay-head">
-          <h2>Orbit replay · first two orbits</h2>
+          <h2>Orbit replay · first two orbits of the run</h2>
           @if (now(); as n) {
             <div class="player">
               <button type="button" class="ghost" (click)="playback.playing.set(!playback.playing())">
@@ -153,7 +154,7 @@
           <div class="telemetry" [class.ecl]="!n.lit" aria-live="off">
             <div class="mode"><span class="dot"></span>{{ n.lit ? 'SUNLIGHT' : 'ECLIPSE' }}</div>
             <dl>
-              <div><dt>MET</dt><dd>{{ n.met }}</dd></div>
+              <div><dt>Elapsed</dt><dd>{{ n.elapsed }}</dd></div>
               <div><dt>UTC</dt><dd>{{ n.utc }}</dd></div>
               <div><dt>Lat</dt><dd>{{ n.lat.toFixed(1) }}°</dd></div>
               <div><dt>Lon</dt><dd>{{ n.lon.toFixed(1) }}°</dd></div>
@@ -168,25 +169,32 @@
 
         <div class="replay">
           <div class="pane">
-            <h3>3D view</h3>
-            <app-orbit-view [result]="r" [failedFaces]="ran()?.failed_faces ?? []" [attitude]="ran()?.attitude ?? 'tumbling'" />
+            <h3>3D view · the CubeSat on its orbit</h3>
+            <app-orbit-view [closeupCanvas]="closeup" [result]="r" [failedFaces]="ran()?.failed_faces ?? []" [attitude]="ran()?.attitude ?? 'tumbling'" />
             <p class="cap">The CubeSat is drawn far larger than scale so its faces can be read.</p>
           </div>
-          <div class="pane">
-            <h3>Orbit geometry</h3>
-            <div class="geo">
-              <app-orbit-plane [result]="r" />
-              @if (now(); as n) {
-                <app-battery-gauge [soc]="n.soc" [net]="n.net" />
-              }
+          <div class="col">
+            <div class="pane">
+              <h3>CubeSat close-up · faces lit by the Sun</h3>
+              <canvas #closeup class="closeup" aria-label="Close-up of the CubeSat; faces facing the Sun glow"></canvas>
+              <p class="cap">Same instant as the 3D view. The arrow points to the Sun; failed faces are red.</p>
             </div>
-            <p class="cap">
-              Seen from the orbit normal with the Sun to the right. The thick arc is where the orbit crosses the
-              Earth's shadow. Battery net power is array power minus the mean load.
-            </p>
+            <div class="pane">
+              <h3>Orbit geometry</h3>
+              <div class="geo">
+                <app-orbit-plane [result]="r" />
+                @if (now(); as n) {
+                  <app-battery-gauge [soc]="n.soc" [net]="n.net" />
+                }
+              </div>
+              <p class="cap">
+                Seen from the orbit normal with the Sun to the right. The thick arc is where the orbit crosses the
+                Earth's shadow. Battery net power is the array power at this instant minus the orbit-average load.
+              </p>
+            </div>
           </div>
           <div class="pane wide">
-            <h3>Ground track</h3>
+            <h3>Ground track · first 24 h of the run</h3>
             <app-ground-track [lat]="r.ground_track.lat" [lon]="r.ground_track.lon" [live]="live()" />
           </div>
         </div>
@@ -204,7 +212,7 @@
       </section>
 
       <section>
-        <h2>Next eclipses</h2>
+        <h2>First eclipses of the run</h2>
         <table>
           <thead><tr><th>Start (UTC)</th><th class="num">Duration</th></tr></thead>
           <tbody>
