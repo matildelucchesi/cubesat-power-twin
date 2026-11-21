@@ -4,11 +4,12 @@ import { FormsModule } from '@angular/forms';
 
 import { GroundTrack } from './ground-track';
 import { LineChart, Series } from './line-chart';
+import { OrbitView } from './orbit-view';
 import { Face, SimulationRequest, SimulationResult, SimulationService } from './simulation.service';
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DecimalPipe, PercentPipe, DatePipe, LineChart, GroundTrack],
+  imports: [FormsModule, DecimalPipe, PercentPipe, DatePipe, LineChart, GroundTrack, OrbitView],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -28,6 +29,8 @@ export class App {
   };
 
   readonly result = signal<SimulationResult | null>(null);
+  /** Scenario that produced the current result (the form may change after a run). */
+  readonly ran = signal<SimulationRequest | null>(null);
   readonly loading = signal(false);
   readonly error = signal('');
 
@@ -58,9 +61,11 @@ export class App {
   run(): void {
     this.loading.set(true);
     this.error.set('');
-    this.api.simulate(this.request).subscribe({
+    const request = structuredClone(this.request);
+    this.api.simulate(request).subscribe({
       next: (r) => {
         this.result.set(r);
+        this.ran.set(request);
         this.loading.set(false);
       },
       error: (e) => {

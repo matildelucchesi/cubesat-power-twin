@@ -12,7 +12,7 @@ import numpy as np
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from eclipse import find_eclipses
+from eclipse import find_eclipses, sun_direction
 from simulation import load_config, run, summary
 
 CONFIG_PATH = "configs/cubesat_1u.yaml"
@@ -68,6 +68,10 @@ def simulate(req: SimulationRequest) -> dict:
     track_step = max(1, 60 // req.step_s)  # about one ground-track point per minute
     eclipses = find_eclipses(df.time, df.sunlit)
 
+    # 3D view: the first ~3.2 hours (two orbits), about one point per minute.
+    first_orbits = df[hours <= 3.2].iloc[::max(1, 60 // req.step_s)]
+    sun = sun_direction(df.time.iloc[[0]])[0]
+
     return {
         "summary": summary(df),
         "series": {
@@ -80,6 +84,16 @@ def simulate(req: SimulationRequest) -> dict:
         "ground_track": {
             "lat": np.round(df.lat_deg[first_day][::track_step], 3).tolist(),
             "lon": np.round(df.lon_deg[first_day][::track_step], 3).tolist(),
+        },
+        "orbit3d": {
+            "hours": np.round((first_orbits.time - df.time.iloc[0]).dt.total_seconds() / 3600, 4).tolist(),
+            "x_km": np.round(first_orbits.x_km, 1).tolist(),
+            "y_km": np.round(first_orbits.y_km, 1).tolist(),
+            "z_km": np.round(first_orbits.z_km, 1).tolist(),
+            "sunlit": first_orbits.sunlit.astype(bool).tolist(),
+            "power_w": np.round(first_orbits.power_w, 3).tolist(),
+            "soc": np.round(first_orbits.soc, 4).tolist(),
+            "sun_dir": np.round(sun, 5).tolist(),
         },
         "eclipses": [
             {"start": e.start.isoformat(), "duration_min": round(e.duration_min, 1)}

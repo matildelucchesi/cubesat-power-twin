@@ -8,6 +8,13 @@ smaller battery.
 
 ![Dashboard](docs/dashboard.png)
 
+The 3D view replays the first two orbits: the Earth lit by the Sun, the Earth's shadow
+cylinder, the orbit coloured by sunlight, and the CubeSat with each face shaded by how
+directly it faces the Sun. A side panel shows the cosine factor of every face, the array
+power and the battery charge at the selected time.
+
+![3D view](docs/orbit-3d.png)
+
 ## What it models
 
 | Block | Module | Model |
@@ -19,7 +26,7 @@ smaller battery.
 | Battery | `battery.py` | Energy balance with charge/discharge efficiencies, clipped between empty and full |
 | Simulation | `simulation.py` | Chains the blocks, driven by `configs/cubesat_1u.yaml` |
 | API | `api.py` | FastAPI, OpenAPI docs at `/docs` |
-| Dashboard | `web/` | Angular, hand-drawn SVG charts |
+| Dashboard | `web/` | Angular, hand-drawn SVG charts, Three.js 3D view |
 
 ## Results (7 days from 2026-11-21, nominal configuration)
 

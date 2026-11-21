@@ -21,6 +21,8 @@ def test_simulate_returns_series_and_summary():
     assert len(body["series"]["soc"]) == n
     assert 0 <= body["summary"]["min_soc"] <= 1
     assert body["ground_track"]["lat"]
+    assert len(body["orbit3d"]["x_km"]) == len(body["orbit3d"]["sunlit"]) > 0
+    assert len(body["orbit3d"]["sun_dir"]) == 3
 
 
 def test_failed_faces_reduce_power():

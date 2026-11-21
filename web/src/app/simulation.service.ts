@@ -32,6 +32,16 @@ export interface SimulationResult {
   summary: SimulationSummary;
   series: { hours: number[]; power_w: number[]; load_w: number[]; soc: number[]; sunlit: boolean[] };
   ground_track: { lat: number[]; lon: number[] };
+  orbit3d: {
+    hours: number[];
+    x_km: number[];
+    y_km: number[];
+    z_km: number[];
+    sunlit: boolean[];
+    power_w: number[];
+    soc: number[];
+    sun_dir: [number, number, number];
+  };
   eclipses: { start: string; duration_min: number }[];
 }
 

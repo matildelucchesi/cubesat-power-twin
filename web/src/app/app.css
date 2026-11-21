@@ -32,3 +32,4 @@ button:disabled { opacity: 0.6; cursor: wait; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--border); }
 th { color: var(--muted); font-weight: 500; }
+.caption { margin: -6px 0 12px; font-size: 12px; color: var(--muted); }

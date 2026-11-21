@@ -71,6 +71,12 @@
       </div>
 
       <div class="panel">
+        <h2>Orbit and spacecraft, first two orbits</h2>
+        <p class="caption">Drag to rotate, scroll to zoom. The CubeSat is drawn about ten million times larger than scale.</p>
+        <app-orbit-view [result]="r" [failedFaces]="ran()?.failed_faces ?? []" [attitude]="ran()?.attitude ?? 'tumbling'" />
+      </div>
+
+      <div class="panel">
         <h2>Battery state of charge</h2>
         <app-line-chart [x]="r.series.hours" [series]="socSeries()" [yMax]="100" yLabel="%" xLabel="hours" title="State of charge" />
       </div>
