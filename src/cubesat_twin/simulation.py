@@ -24,9 +24,14 @@ def run(config: dict) -> pd.DataFrame:
     name, l1, l2 = read_tle(config["satellite"]["tle_file"])
 
     eph = None
-    if sim.get("eclipse_model", "skyfield") == "skyfield":
+    model = sim.get("eclipse_model", "skyfield")
+    if model == "skyfield":
         from skyfield.api import load
-        eph = load("de421.bsp")
+        try:
+            eph = load("de421.bsp")
+        except OSError:
+            # No ephemeris file and no network: fall back to the cylindrical model.
+            model = "cylindrical"
 
     df = propagate(name, l1, l2, datetime.fromisoformat(sim["start"]),
                    sim["duration_days"] * 86400, sim["step_s"], eph=eph)
@@ -43,6 +48,7 @@ def run(config: dict) -> pd.DataFrame:
                                  bat["capacity_wh"], bat["initial_soc"],
                                  bat["charge_efficiency"], bat["discharge_efficiency"])
     df.attrs["name"] = name
+    df.attrs["eclipse_model"] = model
     return df
 
 
@@ -51,6 +57,7 @@ def summary(df: pd.DataFrame) -> dict:
     eclipses = find_eclipses(df.time, df.sunlit)
     return {
         "satellite": df.attrs.get("name", ""),
+        "eclipse_model": df.attrs.get("eclipse_model", ""),
         "days": round((df.time.iloc[-1] - df.time.iloc[0]).total_seconds() / 86400, 2),
         "eclipses": len(eclipses),
         "mean_eclipse_min": round(float(eclipses.duration_min.mean()), 1) if len(eclipses) else 0.0,
