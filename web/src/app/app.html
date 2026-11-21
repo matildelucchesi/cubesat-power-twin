@@ -200,14 +200,37 @@
         </div>
       </section>
 
-      <section class="two">
-        <div>
-          <h2>State of charge</h2>
-          <app-line-chart [x]="r.series.hours" [series]="socSeries()" [bands]="r.series.sunlit" [ghosts]="socGhosts()" [cursor]="now()?.t ? r.orbit3d.hours[now()!.i] : null" [yMax]="100" yLabel="%" xLabel="hours" title="State of charge" />
+      <section class="charts">
+        <div class="charts-head">
+          <h2>Energy over time</h2>
+          <div class="zoom">
+            <span class="seg" role="group" aria-label="Time window">
+              <button type="button" [attr.aria-pressed]="zoom() === 'orbit'" (click)="setZoom('orbit')">1 orbit</button>
+              <button type="button" [attr.aria-pressed]="zoom() === 6" (click)="setZoom(6)">6 h</button>
+              <button type="button" [attr.aria-pressed]="zoom() === 24" (click)="setZoom(24)">24 h</button>
+              <button type="button" [attr.aria-pressed]="zoom() === null" (click)="setZoom(null)">Whole run</button>
+            </span>
+            @if (chartWindow(); as w) {
+              <label class="pan" for="pan">From T + {{ w[0].toFixed(1) }} h
+                <input id="pan" type="range" min="0" [max]="runHours() - (zoomSpan() ?? 0)" step="0.1"
+                       [value]="zoomStart()" (input)="zoomStart.set($any($event.target).valueAsNumber)" />
+              </label>
+            }
+          </div>
         </div>
-        <div>
-          <h2>Power</h2>
-          <app-line-chart [x]="r.series.hours" [series]="powerSeries()" [ghosts]="powerGhosts()" [cursor]="now() ? r.orbit3d.hours[now()!.i] : null" yLabel="W" xLabel="hours" title="Power" />
+        <div class="chart-block">
+          <h3>Battery state of charge</h3>
+          <p class="cap cap-top">Charge stored in the battery, in % of capacity. It rises in sunlight and falls during each eclipse (shaded). Hover for values.</p>
+          <app-line-chart [x]="r.series.hours" [series]="socSeries()" [bands]="r.series.sunlit" [ghosts]="socGhosts()"
+                          [cursor]="now() ? r.orbit3d.hours[now()!.i] : null" [window]="chartWindow()" [yFit]="true" [yMax]="100"
+                          yLabel="SOC [%]" xLabel="time since start of run [h]" title="Battery state of charge" />
+        </div>
+        <div class="chart-block">
+          <h3>Power generated and consumed</h3>
+          <p class="cap cap-top">Solar array output drops to zero in eclipse. When it is above the load line the battery charges.</p>
+          <app-line-chart [x]="r.series.hours" [series]="powerSeries()" [bands]="r.series.sunlit" [ghosts]="powerGhosts()"
+                          [cursor]="now() ? r.orbit3d.hours[now()!.i] : null" [window]="chartWindow()"
+                          yLabel="Power [W]" xLabel="time since start of run [h]" title="Power generated and consumed" />
         </div>
       </section>
 

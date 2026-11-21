@@ -117,3 +117,14 @@ th { color: var(--muted); font: 600 11px var(--f-body); text-transform: uppercas
 
 .col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .closeup { width: 100%; aspect-ratio: 16 / 10; display: block; background: var(--canvas); border: 1px solid var(--border); }
+
+/* Charts */
+.charts { display: flex; flex-direction: column; gap: 18px; }
+.charts-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.charts-head h2 { margin: 0; }
+.zoom { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.zoom .seg button { padding: 5px 10px; flex: none; font-size: 12px; }
+.pan { display: flex; align-items: center; gap: 8px; font: 12px var(--f-data); color: var(--muted); }
+.pan input { width: 180px; accent-color: var(--accent); }
+.chart-block { background: var(--panel); border: 1px solid var(--border); padding: 14px; }
+.cap-top { margin: 0 0 8px; }
