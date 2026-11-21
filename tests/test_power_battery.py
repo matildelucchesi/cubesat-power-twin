@@ -19,6 +19,8 @@ def test_irradiance_higher_in_january_than_july():
 def test_effective_area():
     assert effective_area(FACES, "tumbling") == pytest.approx(0.036 / 4)
     assert effective_area(FACES, "sun_pointing") == pytest.approx(0.006)
+    assert effective_area(FACES, "tumbling", deployable=0.024) == pytest.approx(0.06 / 4)
+    assert effective_area(FACES, "sun_pointing", deployable=0.024) == pytest.approx(0.03)
     with pytest.raises(ValueError):
         effective_area(FACES, "spinning")
 

@@ -4,11 +4,11 @@ import { FormsModule } from '@angular/forms';
 
 import { BatteryGauge } from './battery-gauge';
 import { GroundTrack, LiveTrack } from './ground-track';
-import { LineChart, Series } from './line-chart';
+import { Ghost, LineChart, Series } from './line-chart';
 import { OrbitPlane } from './orbit-plane';
 import { OrbitView } from './orbit-view';
 import { Playback, RATES } from './playback.service';
-import { Face, SimulationRequest, SimulationResult, SimulationService } from './simulation.service';
+import { Catalog, Face, FormFactor, SimulationRequest, SimulationResult, SimulationService } from './simulation.service';
 
 /** One computed result, shown with the relation that produced it and the model used. */
 interface ResultCard {
@@ -17,6 +17,14 @@ interface ResultCard {
   unit: string;
   formula: string;
   chips: { text: string; tone?: 'ok' | 'warn' | 'bad' }[];
+  /** Change against the baseline, already formatted, and whether it is an improvement. */
+  delta?: { text: string; good: boolean | null };
+}
+
+/** A saved run to compare against. */
+interface Baseline {
+  label: string;
+  result: SimulationResult;
 }
 
 @Component({
@@ -31,7 +39,16 @@ export class App {
   readonly rates = RATES;
 
   readonly faces: Face[] = ['+X', '-X', '+Y', '-Y', '+Z', '-Z'];
+  readonly formFactors: FormFactor[] = ['1U', '3U', '6U'];
+  readonly catalog = signal<Catalog | null>(null);
+  /** 'preset' shows the list, 'custom' shows a NORAD number field. */
+  readonly orbitMode = signal<'preset' | 'custom'>('preset');
+  readonly baseline = signal<Baseline | null>(null);
+
   readonly request: SimulationRequest = {
+    norad: 39444,
+    form_factor: '1U',
+    deployables: false,
     days: 3,
     step_s: 60,
     attitude: 'tumbling',
@@ -64,7 +81,14 @@ export class App {
     const margin = s.mean_power_w - s.mean_load_w;
     const working = 6 - q.failed_faces.length;
     const T = this.periodMin();
-    return [
+    const b = this.baseline()?.result.summary;
+    const delta = (now: number, then: number | undefined, unit: string, digits: number, higherIsBetter: boolean | null) => {
+      if (then === undefined) return undefined;
+      const d = now - then;
+      if (Math.abs(d) < 0.5 * 10 ** -digits) return { text: `= baseline`, good: null };
+      return { text: `${d > 0 ? '+' : '−'}${Math.abs(d).toFixed(digits)} ${unit} vs baseline`, good: higherIsBetter === null ? null : (d > 0) === higherIsBetter };
+    };
+    const cards: ResultCard[] = [
       {
         label: 'Mean array power', value: s.mean_power_w.toFixed(2), unit: 'W',
         formula: q.attitude === 'tumbling' ? 'P̄ = S·η·(A/4)·(1 − f_ecl)' : 'P̄ = S·η·A_face·(1 − f_ecl)',
@@ -100,6 +124,34 @@ export class App {
         }],
       },
     ];
+    if (b) {
+      cards[0].delta = delta(s.mean_power_w, b.mean_power_w, 'W', 2, true);
+      cards[1].delta = delta(s.mean_load_w, b.mean_load_w, 'W', 2, false);
+      cards[2].delta = delta(margin, b.mean_power_w - b.mean_load_w, 'W', 2, true);
+      cards[3].delta = delta(s.shadow_fraction * 100, b.shadow_fraction * 100, 'pt', 1, false);
+      cards[4].delta = delta(s.mean_eclipse_min, b.mean_eclipse_min, 'min', 1, false);
+      cards[5].delta = delta(s.min_soc * 100, b.min_soc * 100, 'pt', 1, true);
+    }
+    return cards;
+  });
+
+  readonly socGhosts = computed<Ghost[]>(() => {
+    const b = this.baseline();
+    return b ? [{ label: `Baseline · ${b.label}`, x: b.result.series.hours, values: b.result.series.soc.map((v) => v * 100), color: 'var(--muted)' }] : [];
+  });
+  readonly powerGhosts = computed<Ghost[]>(() => {
+    const b = this.baseline();
+    return b ? [{ label: `Baseline array · ${b.label}`, x: b.result.series.hours, values: b.result.series.power_w, color: 'var(--muted)' }] : [];
+  });
+
+  /** Short description of the current run, used as the baseline label. */
+  readonly runLabel = computed(() => {
+    const r = this.result();
+    const q = this.ran();
+    if (!r || !q) return '';
+    const parts = [r.summary.satellite, q.form_factor + (q.deployables ? ' + wings' : ''), q.attitude === 'tumbling' ? 'tumbling' : 'sun pointing'];
+    if (q.failed_faces.length) parts.push(`${q.failed_faces.length} failed`);
+    return parts.join(' · ');
   });
 
   readonly socSeries = computed<Series[]>(() => {
@@ -179,7 +231,28 @@ export class App {
       const o = this.result()?.orbit3d;
       if (o && o.hours.length > 1) this.playback.load(o.hours.length, (o.hours[1] - o.hours[0]) * 3600);
     });
+    this.api.catalog().subscribe({ next: (c) => this.catalog.set(c), error: () => {} });
     this.run();
+  }
+
+  setFormFactor(ff: FormFactor): void {
+    this.request.form_factor = ff;
+    const preset = this.catalog()?.form_factors[ff];
+    if (preset) this.request.capacity_wh = preset.capacity_wh;
+  }
+
+  setOrbit(value: string): void {
+    if (value === 'custom') {
+      this.orbitMode.set('custom');
+    } else {
+      this.orbitMode.set('preset');
+      this.request.norad = Number(value);
+    }
+  }
+
+  saveBaseline(): void {
+    const r = this.result();
+    if (r) this.baseline.set({ label: this.runLabel(), result: r });
   }
 
   toggleFace(face: Face, failed: boolean): void {

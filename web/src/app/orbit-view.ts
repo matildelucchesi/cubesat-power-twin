@@ -44,6 +44,7 @@ function cssColor(name: string, fallback: string): THREE.Color {
         <span><i class="cyl"></i>Earth's shadow</span>
       </div>
       <span class="hint-3d">Drag to rotate · scroll to zoom</span>
+      <div class="inset-frame" aria-hidden="true"><span>Close-up · faces lit by the Sun</span></div>
     </div>
     <div class="faces-head">
       <h3>Sunlight on each face</h3>
@@ -55,6 +56,13 @@ function cssColor(name: string, fallback: string): THREE.Color {
           <span class="name">{{ f.face }}</span>
           <span class="bar"><b [style.width.%]="f.factor * 100"></b></span>
           <span class="val">{{ f.failed ? 'failed' : (f.factor | number: '1.2-2') }}</span>
+        </li>
+      }
+      @if (hasWings()) {
+        <li>
+          <span class="name">Wings</span>
+          <span class="bar"><b [style.width.%]="wingFactor() * 100"></b></span>
+          <span class="val">{{ wingFactor() | number: '1.2-2' }}</span>
         </li>
       }
     </ul>
@@ -69,11 +77,13 @@ function cssColor(name: string, fallback: string): THREE.Color {
     .legend .shade { background: var(--text); }
     .legend .cyl { background: var(--shade-3d); height: 8px; }
     .hint-3d { position: absolute; right: 10px; top: 8px; font: 11px var(--f-data); color: var(--muted); }
+    .inset-frame { position: absolute; right: 10px; bottom: 10px; width: 34%; aspect-ratio: 1; border: 1px solid var(--border); pointer-events: none; }
+    .inset-frame span { position: absolute; left: 6px; top: 4px; font: 10px var(--f-data); color: var(--muted); }
     .faces-head { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; }
     h3 { margin: 0; font-size: 12px; font-weight: 600; }
     .faces-head span { font-size: 11px; color: var(--muted); }
     .faces { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 16px; }
-    .faces li { display: grid; grid-template-columns: 26px 1fr 44px; gap: 8px; align-items: center; font: 12px var(--f-data); }
+    .faces li { display: grid; grid-template-columns: 40px 1fr 44px; gap: 8px; align-items: center; font: 12px var(--f-data); }
     .bar { height: 6px; background: var(--grid); overflow: hidden; }
     .bar b { display: block; height: 100%; background: var(--sun); }
     .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
@@ -125,6 +135,12 @@ export class OrbitView implements AfterViewInit, OnDestroy {
     }));
   });
 
+  /** Deployable wings face the same way as +X (towards the Sun when sun pointing). */
+  readonly hasWings = computed(() => this.result().spacecraft?.deployables ?? false);
+  readonly wingFactor = computed(() =>
+    this.lit() ? Math.max(0, NORMALS[0].clone().applyQuaternion(this.attitudeQuat()).dot(this.sunDir())) : 0,
+  );
+
   private renderer?: THREE.WebGLRenderer;
   private controls?: OrbitControls;
   private frame = 0;
@@ -132,11 +148,24 @@ export class OrbitView implements AfterViewInit, OnDestroy {
   private readonly camera = new THREE.PerspectiveCamera(40, 4 / 3, 0.01, 100);
   private readonly sat = new THREE.Group();
   private readonly cubeMaterials = FACES.map(() => new THREE.MeshStandardMaterial({ roughness: 0.6 }));
+  private readonly wingMaterial = new THREE.MeshStandardMaterial({ roughness: 0.5 });
+
+  // Close-up inset: the same spacecraft in its own scene, camera fixed near the Sun line.
+  private readonly insetScene = new THREE.Scene();
+  private readonly insetCamera = new THREE.PerspectiveCamera(32, 1, 0.01, 20);
+  private readonly insetSat = new THREE.Group();
+  private readonly insetLight = new THREE.DirectionalLight(0xffffff, 2.2);
+  private readonly insetSunArrow = new THREE.Group();
+  private readonly insetMaterials = FACES.map(() => new THREE.MeshStandardMaterial({ roughness: 0.6 }));
+  private readonly insetWingMaterial = new THREE.MeshStandardMaterial({ roughness: 0.5 });
   private readonly dynamic = new THREE.Group(); // rebuilt when the result changes
 
   constructor() {
     effect(() => {
-      this.result();
+      const sc = this.result().spacecraft;
+      const size = sc?.size_u ?? [1, 1, 1];
+      this.buildBody(this.sat, this.cubeMaterials, this.wingMaterial, size, sc?.deployables ?? false, 0.12);
+      this.buildBody(this.insetSat, this.insetMaterials, this.insetWingMaterial, size, sc?.deployables ?? false, 1);
       this.buildDynamic();
     });
     effect(() => this.updateSatellite());
@@ -145,6 +174,7 @@ export class OrbitView implements AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     const canvas = this.canvas().nativeElement;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    this.renderer.autoClear = true;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
         this.controls = new OrbitControls(this.camera, canvas);
@@ -164,13 +194,8 @@ export class OrbitView implements AfterViewInit, OnDestroy {
     );
     this.scene.add(earth, axis);
 
-    const cube = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), this.cubeMaterials);
-    const edges = new THREE.LineSegments(
-      new THREE.EdgesGeometry(cube.geometry),
-      new THREE.LineBasicMaterial({ color: 0x0f1b2d }),
-    );
-    this.sat.add(cube, edges);
     this.scene.add(this.sat, this.dynamic);
+    this.insetScene.add(new THREE.AmbientLight(0xffffff, 0.55), this.insetLight, this.insetSat, this.insetSunArrow);
 
     this.buildDynamic();
     this.updateSatellite();
@@ -197,7 +222,22 @@ export class OrbitView implements AfterViewInit, OnDestroy {
   private loop = () => {
     this.frame = requestAnimationFrame(this.loop);
     this.controls?.update();
-    this.renderer?.render(this.scene, this.camera);
+    const r = this.renderer;
+    if (!r) return;
+    const c = this.canvas().nativeElement;
+    r.setViewport(0, 0, c.clientWidth, c.clientHeight);
+    r.render(this.scene, this.camera);
+
+    // Inset in the bottom-right corner (viewport origin is bottom-left).
+    const size = Math.round(c.clientWidth * 0.34);
+    r.setScissorTest(true);
+    r.setScissor(c.clientWidth - size - 10, 10, size, size);
+    r.setViewport(c.clientWidth - size - 10, 10, size, size);
+    r.setClearColor(0xffffff, 1);
+    r.clear();
+    r.render(this.insetScene, this.insetCamera);
+    r.setScissorTest(false);
+    r.setClearColor(0x000000, 0);
   };
 
   /** Sun light, shadow cylinder and orbit line: they depend on the result only. */
@@ -205,6 +245,19 @@ export class OrbitView implements AfterViewInit, OnDestroy {
     this.dynamic.clear();
     const o = this.o();
     const sun = this.sunDir();
+
+    // Inset: light from the Sun; camera 55° away from the Sun line so lit and dark faces both show.
+    this.insetLight.position.copy(sun.clone().multiplyScalar(5));
+    const perp = new THREE.Vector3(0, 1, 0).cross(sun);
+    if (perp.lengthSq() < 1e-6) perp.set(1, 0, 0);
+    perp.normalize();
+    const camDir = sun.clone().multiplyScalar(Math.cos(55 * Math.PI / 180))
+      .add(perp.multiplyScalar(Math.sin(55 * Math.PI / 180)))
+      .add(new THREE.Vector3(0, 0.35, 0)).normalize();
+    this.insetCamera.position.copy(camDir.multiplyScalar(4.6));
+    this.insetCamera.lookAt(0, 0, 0);
+    this.insetSunArrow.clear();
+    this.insetSunArrow.add(new THREE.ArrowHelper(sun, sun.clone().multiplyScalar(0.85), 0.55, cssColor('--sun', '#d08a12').getHex(), 0.18, 0.1));
 
     const light = new THREE.DirectionalLight(0xffffff, 1.6);
     light.position.copy(sun.clone().multiplyScalar(10));
@@ -262,14 +315,46 @@ export class OrbitView implements AfterViewInit, OnDestroy {
     if (!o.hours.length) return;
     this.sat.position.copy(toWorld(o.x_km[i], o.y_km[i], o.z_km[i]));
     this.sat.quaternion.copy(this.attitudeQuat());
+    this.insetSat.quaternion.copy(this.attitudeQuat());
 
     const panel = new THREE.Color(0x2c3e5c);
     const lit = cssColor('--sun', '#d08a12');
     const failed = cssColor('--danger', '#c0392b');
     this.faceRows().forEach((row, k) => {
-      const m = this.cubeMaterials[k];
-      m.color.copy(row.failed ? failed.clone().multiplyScalar(0.55) : panel);
-      m.emissive.copy(row.failed ? new THREE.Color(0) : lit).multiplyScalar(row.failed ? 0 : row.factor * 0.8);
+      for (const m of [this.cubeMaterials[k], this.insetMaterials[k]]) {
+        m.color.copy(row.failed ? failed.clone().multiplyScalar(0.55) : panel);
+        m.emissive.copy(row.failed ? new THREE.Color(0) : lit).multiplyScalar(row.failed ? 0 : row.factor * 0.8);
+      }
     });
+    for (const m of [this.wingMaterial, this.insetWingMaterial]) {
+      m.color.copy(panel);
+      m.emissive.copy(lit).multiplyScalar(this.wingFactor() * 0.8);
+    }
+  }
+
+  /**
+   * Body box sized by the form factor (in 10 cm units, normalised so the
+   * longest side is `longest`), with two wings along ±Y when deployables are on.
+   */
+  private buildBody(group: THREE.Group, mats: THREE.Material[], wingMat: THREE.Material,
+                    sizeU: number[], wings: boolean, longest: number): void {
+    group.clear();
+    const k = longest / Math.max(...sizeU);
+    const [sx, sy, sz] = sizeU.map((u) => u * k);
+    // three.js world axes: body X -> x, body Y -> y, body Z -> z.
+    const box = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mats);
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(box.geometry), new THREE.LineBasicMaterial({ color: 0x0f1b2d }));
+    group.add(box, edges);
+    if (!wings) return;
+    const back = new THREE.MeshStandardMaterial({ color: 0xc9d1dc, roughness: 0.8 });
+    const w = sy * 1.6;
+    for (const side of [1, -1]) {
+      // Cells on the +X side of each wing (material group 0), bare back elsewhere.
+      const wing = new THREE.Mesh(new THREE.BoxGeometry(sx * 0.04, w, sz * 0.95), [wingMat, back, back, back, back, back]);
+      wing.position.set(sx / 2, side * (sy / 2 + w / 2 + sy * 0.05), 0);
+      const outline = new THREE.LineSegments(new THREE.EdgesGeometry(wing.geometry), new THREE.LineBasicMaterial({ color: 0x0f1b2d }));
+      outline.position.copy(wing.position);
+      group.add(wing, outline);
+    }
   }
 }

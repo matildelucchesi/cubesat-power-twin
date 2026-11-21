@@ -21,7 +21,11 @@ def run(config: dict) -> pd.DataFrame:
     """Run the simulation described by a config dict and return a DataFrame
     with orbit, sunlight, generated power, load and state of charge."""
     sim = config["simulation"]
-    name, l1, l2 = read_tle(config["satellite"]["tle_file"])
+    sat = config["satellite"]
+    if "tle_lines" in sat:  # already resolved (e.g. downloaded by the API)
+        name, l1, l2 = sat["tle_lines"]
+    else:
+        name, l1, l2 = read_tle(sat["tle_file"])
 
     eph = None
     model = sim.get("eclipse_model", "skyfield")
@@ -40,7 +44,8 @@ def run(config: dict) -> pd.DataFrame:
 
     array = config["solar_array"]
     df["power_w"] = generated_power(df.time, df.sunlit, array["faces"],
-                                    array["cell_efficiency"], array["attitude"])
+                                    array["cell_efficiency"], array["attitude"],
+                                    array.get("deployable", 0.0))
     df["load_w"] = load_profile(len(df), config["loads"])
 
     bat = config["battery"]

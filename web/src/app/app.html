@@ -1,7 +1,7 @@
 <header class="top">
   <div>
     <p class="eyebrow">Mission analysis · electrical power</p>
-    <h1>{{ result()?.summary?.satellite || 'FUNCUBE-1 (AO-73)' }} power budget</h1>
+    <h1>{{ result()?.summary?.satellite || 'FUNCUBE-1 (AO-73)' }} · {{ ran()?.form_factor || '1U' }} power budget</h1>
   </div>
   <p class="meta">
     <span>Orbit from TLE · SGP4</span>
@@ -11,7 +11,43 @@
 
 <div class="body">
   <form class="side" (ngSubmit)="run()">
-    <h2>Scenario</h2>
+    <h2>Spacecraft</h2>
+
+    <label for="orbit">Orbit
+      <select id="orbit" name="orbit" [ngModel]="orbitMode() === 'custom' ? 'custom' : '' + request.norad"
+              (ngModelChange)="setOrbit($event)">
+        @for (s of catalog()?.satellites ?? [{ norad: 39444, name: 'FUNcube-1 (AO-73)', orbit: '' }]; track s.norad) {
+          <option [value]="'' + s.norad">{{ s.name }}</option>
+        }
+        <option value="custom">Other NORAD number…</option>
+      </select>
+      @if (orbitMode() === 'preset') {
+        @for (s of catalog()?.satellites ?? []; track s.norad) {
+          @if (s.norad === request.norad) { <span class="hint">{{ s.orbit }}</span> }
+        }
+      }
+    </label>
+    @if (orbitMode() === 'custom') {
+      <label for="norad">NORAD catalog number
+        <input id="norad" type="number" name="norad" min="1" max="999999" [(ngModel)]="request.norad" />
+        <span class="hint">The TLE is downloaded from CelesTrak.</span>
+      </label>
+    }
+
+    <div class="field">
+      <span class="lbl">Form factor</span>
+      <div class="seg" role="group" aria-label="Form factor">
+        @for (ff of formFactors; track ff) {
+          <button type="button" [attr.aria-pressed]="request.form_factor === ff" (click)="setFormFactor(ff)">{{ ff }}</button>
+        }
+      </div>
+    </div>
+    <label class="check" for="deploy">
+      <input id="deploy" type="checkbox" name="deploy" [(ngModel)]="request.deployables" />
+      Deployable solar panels
+    </label>
+
+    <h2 class="sub">Scenario</h2>
 
     <label for="days">Days
       <input id="days" type="number" name="days" min="0.5" max="14" step="0.5" [(ngModel)]="request.days" />
@@ -58,13 +94,32 @@
   @if (result(); as r) {
     <main>
       <section>
-        <h2>Computed results</h2>
+        <div class="results-head">
+          <h2>Computed results</h2>
+          <div class="baseline">
+            @if (baseline(); as b) {
+              <span class="chip ref">Baseline · {{ b.label }}</span>
+              <button type="button" class="ghost" (click)="baseline.set(null)">Clear</button>
+            }
+            <button type="button" class="ghost" (click)="saveBaseline()">{{ baseline() ? 'Replace baseline' : 'Set as baseline' }}</button>
+          </div>
+        </div>
+        @if (r.spacecraft; as sc) {
+          <p class="sc-line">
+            NORAD {{ sc.norad }} · i = {{ sc.inclination_deg.toFixed(1) }}° · TLE epoch {{ sc.tle_epoch | date: 'MMM d, HH:mm' : 'UTC' }} UTC
+            ({{ sc.tle_source === 'celestrak' ? 'downloaded from CelesTrak' : sc.tle_source === 'cache' ? 'cached' : 'bundled, offline' }})
+            · {{ sc.form_factor }}{{ sc.deployables ? ' with wings' : '' }} · cells {{ (sc.cell_area_m2 * 1e4).toFixed(0) }} cm²
+          </p>
+        }
         <div class="cards">
           @for (c of cards(); track c.label) {
             <article class="card">
               <span class="k">{{ c.label }}</span>
               <span class="v">{{ c.value }}<small>{{ c.unit }}</small></span>
               <code class="eq">{{ c.formula }}</code>
+              @if (c.delta; as d) {
+                <span class="delta" [class.good]="d.good === true" [class.bad]="d.good === false">{{ d.text }}</span>
+              }
               <span class="chips">
                 @for (chip of c.chips; track chip.text) {
                   <span class="chip" [class]="chip.tone">{{ chip.text }}</span>
@@ -140,11 +195,11 @@
       <section class="two">
         <div>
           <h2>State of charge</h2>
-          <app-line-chart [x]="r.series.hours" [series]="socSeries()" [bands]="r.series.sunlit" [cursor]="now()?.t ? r.orbit3d.hours[now()!.i] : null" [yMax]="100" yLabel="%" xLabel="hours" title="State of charge" />
+          <app-line-chart [x]="r.series.hours" [series]="socSeries()" [bands]="r.series.sunlit" [ghosts]="socGhosts()" [cursor]="now()?.t ? r.orbit3d.hours[now()!.i] : null" [yMax]="100" yLabel="%" xLabel="hours" title="State of charge" />
         </div>
         <div>
           <h2>Power</h2>
-          <app-line-chart [x]="r.series.hours" [series]="powerSeries()" [cursor]="now() ? r.orbit3d.hours[now()!.i] : null" yLabel="W" xLabel="hours" title="Power" />
+          <app-line-chart [x]="r.series.hours" [series]="powerSeries()" [ghosts]="powerGhosts()" [cursor]="now() ? r.orbit3d.hours[now()!.i] : null" yLabel="W" xLabel="hours" title="Power" />
         </div>
       </section>
 

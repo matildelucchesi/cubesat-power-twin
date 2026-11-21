@@ -38,6 +38,21 @@ power and the battery charge at the selected time.
 
 ![Failure scenario](docs/dashboard-failure.png)
 
+## Using it as a study tool
+
+The dashboard is built to compare scenarios, not to show a single case.
+
+- **Orbit**: pick a preset (FUNcube-1 in a sun-synchronous 97.8° orbit, the ISS orbit at 51.6°,
+  Hubble at 28.5°) or type any NORAD number. The TLE is downloaded from CelesTrak and cached for a
+  day; the bundled FUNcube-1 TLE keeps the app working offline. The run starts at the TLE epoch,
+  where SGP4 is most accurate.
+- **Form factor**: 1U, 3U or 6U body with optional deployable panels
+  (representative areas, batteries and loads in `configs/form_factors.yaml`).
+- **Baseline**: save a run as baseline; the next runs show the difference on every result card and
+  overlay the baseline on the charts.
+- **Replay**: telemetry strip, 3D view with a close-up of the lit faces, to-scale orbit plane,
+  battery gauge and live ground track all follow one clock (60×, 300× or 1000× real time).
+
 ## Run it
 
 Developed on Ubuntu (WSL 2). Requires Python 3.10+ and Node 20+.

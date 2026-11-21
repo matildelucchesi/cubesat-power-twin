@@ -95,3 +95,22 @@ th { color: var(--muted); font: 600 11px var(--f-body); text-transform: uppercas
 .telemetry .next dd { color: var(--sun); font-weight: 600; }
 .telemetry.ecl .next dd { color: #9fd3ff; }
 .pane.wide { grid-column: 1 / -1; }
+
+/* Spacecraft selection */
+.side h2.sub { margin-top: 10px; }
+.hint { font-size: 11px; color: var(--muted); }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field .lbl { font-size: 12px; color: var(--muted); }
+.seg { display: flex; }
+.seg button { flex: 1; font: 500 13px var(--f-data); background: var(--panel); color: var(--text); border: 1px solid var(--border); padding: 6px 0; cursor: pointer; margin-left: -1px; }
+.seg button[aria-pressed='true'] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); position: relative; }
+
+/* Baseline comparison */
+.results-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.results-head h2 { margin: 0; }
+.baseline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chip.ref { border-style: dashed; color: var(--text); }
+.sc-line { margin: 0 0 12px; font: 11.5px var(--f-data); color: var(--muted); }
+.delta { font: 500 11.5px var(--f-data); color: var(--muted); }
+.delta.good { color: var(--good); }
+.delta.bad { color: var(--danger); }
