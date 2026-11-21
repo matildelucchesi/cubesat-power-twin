@@ -1,21 +1,29 @@
-# Representative CubeSat form factors (assumptions, not a specific mission).
-# faces: cell area per body face [m^2]; deployable: extra one-sided panel area
-# that is added when deployable panels are selected.
+# Representative CubeSat form factors, built from commercial off-the-shelf parts
+# (not one specific mission). Cell areas count whole triple-junction cells of
+# the common 30.18 cm^2 size (about 80 x 40 mm), so each face carries as many
+# cells as fit on a standard panel of that size:
+#   10 x 10 cm -> 2 cells, 10 x 30 cm -> 7 cells, 20 x 30 cm -> 14 cells,
+#   20 x 10 cm -> 4 cells.
+# faces: cell area per body face [m^2]. A face's normal is its axis, so the
+#   +X face is the Y-by-Z side of the body.
+# deployable: extra one-sided cell area when deployable panels are selected,
+#   modelled as four panels the size of the long side (two wings of two).
+# capacity_wh: Li-ion packs of 18650 cells (2.6 Ah x 3.7 V = 9.6 Wh each).
 1U:
   size_u: [1, 1, 1]          # body size along X, Y, Z in units of 10 cm
-  faces: {+X: 0.006, -X: 0.006, +Y: 0.006, -Y: 0.006, +Z: 0.006, -Z: 0.006}
-  deployable: 0.024          # four 10 x 10 cm panels, partly covered with cells
-  capacity_wh: 20
+  faces: {+X: 0.0060, -X: 0.0060, +Y: 0.0060, -Y: 0.0060, +Z: 0.0060, -Z: 0.0060}
+  deployable: 0.0241         # four 10 x 10 cm panels, 2 cells each
+  capacity_wh: 19.2          # 2 x 18650
   loads: {obc: 0.4, eps: 0.2, adcs: 0.3, radio_rx: 0.3, radio_tx: 1.0}
 3U:
   size_u: [1, 1, 3]
-  faces: {+X: 0.018, -X: 0.018, +Y: 0.018, -Y: 0.018, +Z: 0.006, -Z: 0.006}
-  deployable: 0.072          # two wings of two 10 x 30 cm panels
-  capacity_wh: 40
+  faces: {+X: 0.0211, -X: 0.0211, +Y: 0.0211, -Y: 0.0211, +Z: 0.0060, -Z: 0.0060}
+  deployable: 0.0845         # four 10 x 30 cm panels, 7 cells each
+  capacity_wh: 38.5          # 4 x 18650
   loads: {obc: 0.4, eps: 0.3, adcs: 0.8, radio_rx: 0.4, radio_tx: 2.0, payload: 1.5}
 6U:
   size_u: [2, 1, 3]
-  faces: {+X: 0.036, -X: 0.036, +Y: 0.018, -Y: 0.018, +Z: 0.012, -Z: 0.012}
-  deployable: 0.144          # two wings of two 20 x 30 cm panels
-  capacity_wh: 80
+  faces: {+X: 0.0211, -X: 0.0211, +Y: 0.0423, -Y: 0.0423, +Z: 0.0121, -Z: 0.0121}
+  deployable: 0.1690         # four 20 x 30 cm panels, 14 cells each
+  capacity_wh: 77.0          # 8 x 18650
   loads: {obc: 0.5, eps: 0.4, adcs: 1.5, radio_rx: 0.5, radio_tx: 4.0, payload: 4.0}
