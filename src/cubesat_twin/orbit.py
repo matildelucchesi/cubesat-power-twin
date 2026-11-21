@@ -1,4 +1,4 @@
-"""Orbital propagation with TLE + skyfield (SGP4)."""
+"""Orbit propagation from a TLE with skyfield (SGP4)."""
 from datetime import datetime
 
 import numpy as np
@@ -7,7 +7,7 @@ from skyfield.api import EarthSatellite, load, wgs84
 
 
 def read_tle(path: str) -> tuple[str, str, str]:
-    """Legge un file TLE a 3 righe e restituisce (nome, riga1, riga2)."""
+    """Read a 3-line TLE file and return (name, line1, line2)."""
     with open(path, "r") as f:
         name = f.readline().strip()
         line1 = f.readline().strip()
@@ -18,8 +18,9 @@ def read_tle(path: str) -> tuple[str, str, str]:
 def propagate(name: str, line1: str, line2: str,
               start: datetime, duration_s: float, step_s: float,
               eph=None) -> pd.DataFrame:
-    """Restituisce un DataFrame con colonne: time, lat_deg, lon_deg, alt_km,
-    x_km, y_km, z_km (posizione inerziale GCRS) e, se si passa eph, sunlit."""
+    """Propagate the orbit and return a DataFrame with columns
+    time, lat_deg, lon_deg, alt_km, x_km, y_km, z_km (inertial GCRS position)
+    and, if eph is given, sunlit."""
     ts = load.timescale()
     satellite = EarthSatellite(line1, line2, name, ts)
     seconds = np.arange(0, duration_s, step_s)
@@ -35,13 +36,13 @@ def propagate(name: str, line1: str, line2: str,
         "lon_deg": longitude,
         "alt_km": altitude,
     })
-    # Posizione nel sistema inerziale GCRS (centrato nella Terra, assi fissi
-    # rispetto alle stelle): serve per eclissi e potenza dei pannelli.
+    # Position in the inertial GCRS frame (Earth-centred, axes fixed with
+    # respect to the stars): needed for eclipses and solar panel power.
     x, y, z = satellite_position.position.km
     df["x_km"], df["y_km"], df["z_km"] = x, y, z
 
     if eph is not None:
-        # Modello di skyfield: True se il satellite vede il Sole.
+        # skyfield model: True when the satellite can see the Sun.
         df["sunlit"] = satellite_position.is_sunlit(eph)
     return df
 
@@ -50,4 +51,4 @@ if __name__ == "__main__":
     name, l1, l2 = read_tle("data/tle/funcube1.tle")
     df = propagate(name, l1, l2, datetime(2026, 11, 21), 86400, 30)
     print(df.head())
-    print("Altitudine min/max [km]:", df.alt_km.min(), df.alt_km.max())
+    print("Altitude min/max [km]:", df.alt_km.min(), df.alt_km.max())

@@ -1,28 +1,28 @@
-"""Eclissi: quando il satellite e' nell'ombra della Terra.
+"""Eclipses: when the satellite is in the Earth's shadow.
 
-Due modelli a confronto:
-- skyfield (is_sunlit), usato come riferimento, calcolato in orbit.propagate;
-- un modello a ombra cilindrica scritto a mano, per capire la fisica.
+Two models are compared:
+- skyfield (is_sunlit), used as the reference, computed in orbit.propagate;
+- a hand-written cylindrical shadow model, to make the physics explicit.
 """
 import numpy as np
 import pandas as pd
 
-EARTH_RADIUS_KM = 6378.137  # raggio equatoriale WGS84
+EARTH_RADIUS_KM = 6378.137  # WGS84 equatorial radius
 
 
 def sun_direction(times: pd.Series) -> np.ndarray:
-    """Versore Terra->Sole nel sistema equatoriale (N x 3).
+    """Unit vector from the Earth to the Sun in the equatorial frame (N x 3).
 
-    Formula a bassa precisione dell'Astronomical Almanac: errore di circa
-    0,01 gradi, piu' che sufficiente per le eclissi.
+    Low-precision formula from the Astronomical Almanac: about 0.01 degrees
+    of error, more than enough for eclipses.
     """
     jd = times.map(lambda t: t.timestamp()).to_numpy() / 86400.0 + 2440587.5
-    d = jd - 2451545.0                                   # giorni dal J2000
-    mean_lon = np.radians(280.460 + 0.9856474 * d)       # longitudine media
-    mean_anom = np.radians(357.528 + 0.9856003 * d)      # anomalia media
+    d = jd - 2451545.0                                   # days since J2000
+    mean_lon = np.radians(280.460 + 0.9856474 * d)       # mean longitude
+    mean_anom = np.radians(357.528 + 0.9856003 * d)      # mean anomaly
     ecl_lon = (mean_lon + np.radians(1.915) * np.sin(mean_anom)
                + np.radians(0.020) * np.sin(2 * mean_anom))
-    obliquity = np.radians(23.439 - 4e-7 * d)            # inclinazione asse terrestre
+    obliquity = np.radians(23.439 - 4e-7 * d)            # obliquity of the ecliptic
     return np.column_stack([
         np.cos(ecl_lon),
         np.cos(obliquity) * np.sin(ecl_lon),
@@ -31,25 +31,26 @@ def sun_direction(times: pd.Series) -> np.ndarray:
 
 
 def sunlit_cylindrical(df: pd.DataFrame) -> np.ndarray:
-    """True se il satellite e' al sole, con l'ombra della Terra come cilindro.
+    """True when the satellite is in sunlight, modelling the Earth's shadow
+    as a cylinder.
 
-    Il satellite e' in ombra se sta "dietro" la Terra rispetto al Sole
-    (proiezione sulla direzione del Sole negativa) e la sua distanza
-    dall'asse Terra-Sole e' minore del raggio terrestre.
+    The satellite is in shadow when it is "behind" the Earth as seen from the
+    Sun (negative projection on the Sun direction) and its distance from the
+    Earth-Sun axis is smaller than the Earth's radius.
     """
     r = df[["x_km", "y_km", "z_km"]].to_numpy()
     s = sun_direction(df.time)
-    along = np.sum(r * s, axis=1)                        # componente lungo il Sole
-    perp = np.linalg.norm(r - along[:, None] * s, axis=1)  # distanza dall'asse
+    along = np.sum(r * s, axis=1)                        # component along the Sun direction
+    perp = np.linalg.norm(r - along[:, None] * s, axis=1)  # distance from the axis
     in_shadow = (along < 0) & (perp < EARTH_RADIUS_KM)
     return ~in_shadow
 
 
 def find_eclipses(time: pd.Series, sunlit) -> pd.DataFrame:
-    """Elenco delle eclissi complete: inizio, fine, durata in minuti.
+    """List of complete eclipses: start, end and duration in minutes.
 
-    Le eclissi gia' in corso all'inizio o non finite alla fine della
-    simulazione vengono scartate, perche' la loro durata non e' nota.
+    Eclipses already in progress at the start or not finished at the end of
+    the simulation are discarded, because their duration is unknown.
     """
     shadow = (~pd.Series(np.asarray(sunlit, dtype=bool))).astype(int)
     change = shadow.diff()
@@ -57,8 +58,8 @@ def find_eclipses(time: pd.Series, sunlit) -> pd.DataFrame:
     ends = list(np.flatnonzero(change.to_numpy() == -1))
 
     if ends and starts and ends[0] < starts[0]:
-        ends = ends[1:]                  # eclissi iniziata prima della simulazione
-    n = min(len(starts), len(ends))      # scarta un'eclissi non ancora finita
+        ends = ends[1:]                  # eclipse started before the simulation
+    n = min(len(starts), len(ends))      # drop an eclipse that has not ended
 
     t = time.reset_index(drop=True)
     rows = [{
@@ -77,19 +78,19 @@ if __name__ == "__main__":
     from orbit import propagate, read_tle
     from plots import plot_sunlight
 
-    eph = load("de421.bsp")  # effemeridi JPL, circa 17 MB al primo avvio
+    eph = load("de421.bsp")  # JPL ephemeris, about 17 MB on first run
     name, l1, l2 = read_tle("data/tle/funcube1.tle")
     df = propagate(name, l1, l2, datetime(2026, 11, 21), 86400, 30, eph=eph)
     df["sunlit_cyl"] = sunlit_cylindrical(df)
 
-    for label, column in [("skyfield", "sunlit"), ("cilindrico", "sunlit_cyl")]:
+    for label, column in [("skyfield", "sunlit"), ("cylindrical", "sunlit_cyl")]:
         ecl = find_eclipses(df.time, df[column])
-        print(f"{label:>10}: {len(ecl)} eclissi, durata media "
+        print(f"{label:>11}: {len(ecl)} eclipses, mean duration "
               f"{ecl.duration_min.mean():.1f} min, "
-              f"{(~df[column]).mean():.1%} del tempo in ombra")
+              f"{(~df[column]).mean():.1%} of the time in shadow")
 
     disagree = (df.sunlit != df.sunlit_cyl).mean()
-    print(f"I due modelli sono in disaccordo nel {disagree:.2%} degli istanti")
+    print(f"The two models disagree on {disagree:.2%} of the time steps")
 
-    plot_sunlight(df, "results/sunlight.png", f"{name}: sole e ombra, prime 6 ore")
-    print("Salvato results/sunlight.png")
+    plot_sunlight(df, "results/sunlight.png", f"{name}: sunlight and shadow, first 6 hours")
+    print("Saved results/sunlight.png")
