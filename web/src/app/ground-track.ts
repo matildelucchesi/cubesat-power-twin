@@ -23,12 +23,12 @@ import { Component, computed, input } from '@angular/core';
     </svg>
   `,
   styles: `
-    svg { width: 100%; height: auto; display: block; border-radius: 8px; }
+    svg { width: 100%; height: auto; display: block; }
     .bg { fill: var(--panel-2); }
     .grid { stroke: var(--grid); }
-    .tick { font-size: 10px; fill: var(--muted); }
+    .tick { font: 10px var(--f-data); fill: var(--muted); }
     .track { fill: none; stroke: var(--accent); stroke-width: 1.5; }
-    .start { fill: var(--danger); }
+    .start { fill: var(--sun); }
   `,
 })
 export class GroundTrack {

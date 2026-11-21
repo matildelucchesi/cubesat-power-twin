@@ -1,10 +1,11 @@
 import {
-  AfterViewInit, Component, ElementRef, OnDestroy, computed, effect, input, signal, viewChild,
+  AfterViewInit, Component, ElementRef, OnDestroy, computed, effect, inject, input, viewChild,
 } from '@angular/core';
-import { DecimalPipe, PercentPipe } from '@angular/common';
+import { DecimalPipe } from '@angular/common';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
+import { Playback } from './playback.service';
 import { Face, SimulationResult } from './simulation.service';
 
 const EARTH_RADIUS_KM = 6378.137;
@@ -33,78 +34,48 @@ function cssColor(name: string, fallback: string): THREE.Color {
  */
 @Component({
   selector: 'app-orbit-view',
-  imports: [DecimalPipe, PercentPipe],
+  imports: [DecimalPipe],
   template: `
-    <div class="layout">
-      <div class="stage">
-        <canvas #canvas aria-label="3D view of the orbit and the CubeSat"></canvas>
-        <div class="legend">
-          <span><i class="sun"></i>Orbit in sunlight</span>
-          <span><i class="shade"></i>Orbit in eclipse</span>
-          <span><i class="cyl"></i>Earth's shadow</span>
-          <span><i class="sun"></i>→ Sun direction</span>
-        </div>
+    <div class="stage">
+      <canvas #canvas aria-label="3D view of the orbit and the CubeSat"></canvas>
+      <div class="legend">
+        <span><i class="sun"></i>Orbit in sunlight</span>
+        <span><i class="shade"></i>Orbit in eclipse</span>
+        <span><i class="cyl"></i>Earth's shadow</span>
       </div>
-
-      <aside>
-        <div class="row">
-          <button type="button" class="ghost" (click)="playing.set(!playing())">{{ playing() ? 'Pause' : 'Play' }}</button>
-          <input type="range" min="0" [max]="last()" step="1" [value]="index()"
-                 (input)="scrub($any($event.target).valueAsNumber)" aria-label="Time" />
-        </div>
-        <p class="time">T + {{ hours() | number: '1.2-2' }} h</p>
-
-        <span class="badge" [class.dark]="!lit()">{{ lit() ? 'In sunlight' : 'In eclipse' }}</span>
-        <dl>
-          <dt>Array power</dt><dd>{{ power() | number: '1.2-2' }} W</dd>
-          <dt>Battery</dt><dd>{{ soc() | percent: '1.0-1' }}</dd>
-        </dl>
-
-        <h3>Sunlight on each face</h3>
-        <p class="hint">cos of the angle between the face and the Sun. Only faces with cells and a positive value produce power.</p>
-        <ul class="faces">
-          @for (f of faceRows(); track f.face) {
-            <li [class.failed]="f.failed">
-              <span class="name">{{ f.face }}</span>
-              <span class="bar"><b [style.width.%]="f.factor * 100"></b></span>
-              <span class="val">{{ f.failed ? 'failed' : (f.factor | number: '1.2-2') }}</span>
-            </li>
-          }
-        </ul>
-        <p class="hint">
-          {{ attitude() === 'sun_pointing'
-            ? 'Sun pointing: +X is kept towards the Sun.'
-            : 'Tumbling: the attitude changes over time, so the power model uses the average (total cell area / 4).' }}
-        </p>
-      </aside>
+      <span class="hint-3d">Drag to rotate · scroll to zoom</span>
     </div>
+    <div class="faces-head">
+      <h3>Sunlight on each face</h3>
+      <span>cos θ between face normal and Sun · {{ attitude() === 'sun_pointing' ? '+X kept on the Sun' : 'tumbling, illustrative attitude' }}</span>
+    </div>
+    <ul class="faces">
+      @for (f of faceRows(); track f.face) {
+        <li [class.failed]="f.failed">
+          <span class="name">{{ f.face }}</span>
+          <span class="bar"><b [style.width.%]="f.factor * 100"></b></span>
+          <span class="val">{{ f.failed ? 'failed' : (f.factor | number: '1.2-2') }}</span>
+        </li>
+      }
+    </ul>
   `,
   styles: `
-    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; }
-    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+    :host { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
     .stage { position: relative; }
-    canvas { width: 100%; aspect-ratio: 4 / 3; display: block; border-radius: 8px; background: var(--panel-2); }
-    .legend { position: absolute; left: 12px; bottom: 10px; display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+    canvas { width: 100%; aspect-ratio: 4 / 3; display: block; background: var(--canvas); border: 1px solid var(--border); }
+    .legend { position: absolute; left: 10px; bottom: 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11px; color: var(--muted); }
     .legend i { display: inline-block; width: 14px; height: 3px; margin-right: 6px; vertical-align: middle; }
-    .legend .sun { background: var(--warn); }
-    .legend .shade { background: #5a6a94; }
-    .legend .cyl { background: #3a4670; height: 8px; }
-    aside { display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
-    .row { display: flex; gap: 8px; align-items: center; }
-    .row input { flex: 1; }
-    .ghost { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 6px; cursor: pointer; }
-    .time { margin: 0; font-variant-numeric: tabular-nums; color: var(--muted); }
-    .badge { align-self: start; padding: 3px 10px; border-radius: 999px; background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); font-weight: 600; }
-    .badge.dark { background: color-mix(in srgb, #8a9bc8 18%, transparent); color: #a9b6d8; }
-    dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; }
-    dt { color: var(--muted); }
-    dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
-    h3 { margin: 8px 0 0; font-size: 13px; }
-    .hint { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
-    .faces { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-    .faces li { display: grid; grid-template-columns: 28px 1fr 44px; gap: 8px; align-items: center; }
-    .bar { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
-    .bar b { display: block; height: 100%; background: var(--warn); }
+    .legend .sun { background: var(--sun); }
+    .legend .shade { background: var(--text); }
+    .legend .cyl { background: var(--shade-3d); height: 8px; }
+    .hint-3d { position: absolute; right: 10px; top: 8px; font: 11px var(--f-data); color: var(--muted); }
+    .faces-head { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; }
+    h3 { margin: 0; font-size: 12px; font-weight: 600; }
+    .faces-head span { font-size: 11px; color: var(--muted); }
+    .faces { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 16px; }
+    .faces li { display: grid; grid-template-columns: 26px 1fr 44px; gap: 8px; align-items: center; font: 12px var(--f-data); }
+    .bar { height: 6px; background: var(--grid); overflow: hidden; }
+    .bar b { display: block; height: 100%; background: var(--sun); }
     .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
     .failed .name, .failed .val { color: var(--danger); }
     .failed .bar b { background: transparent; }
@@ -117,15 +88,12 @@ export class OrbitView implements AfterViewInit, OnDestroy {
 
   private readonly canvas = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
 
-  readonly index = signal(0);
-  readonly playing = signal(true);
+  private readonly playback = inject(Playback);
+  readonly index = computed(() => Math.min(this.playback.index(), this.last()));
 
   private readonly o = computed(() => this.result().orbit3d);
   readonly last = computed(() => this.o().hours.length - 1);
-  readonly hours = computed(() => this.o().hours[this.index()] ?? 0);
   readonly lit = computed(() => this.o().sunlit[this.index()] ?? false);
-  readonly power = computed(() => this.o().power_w[this.index()] ?? 0);
-  readonly soc = computed(() => this.o().soc[this.index()] ?? 0);
 
   private readonly sunDir = computed(() => {
     const [x, y, z] = this.o().sun_dir;
@@ -160,7 +128,6 @@ export class OrbitView implements AfterViewInit, OnDestroy {
   private renderer?: THREE.WebGLRenderer;
   private controls?: OrbitControls;
   private frame = 0;
-  private lastStep = 0;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(40, 4 / 3, 0.01, 100);
   private readonly sat = new THREE.Group();
@@ -170,7 +137,6 @@ export class OrbitView implements AfterViewInit, OnDestroy {
   constructor() {
     effect(() => {
       this.result();
-      this.index.set(0);
       this.buildDynamic();
     });
     effect(() => this.updateSatellite());
@@ -186,22 +152,22 @@ export class OrbitView implements AfterViewInit, OnDestroy {
     this.controls.minDistance = 1.6;
     this.controls.maxDistance = 8;
 
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.12));
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.9));
 
     const earth = new THREE.Mesh(
       new THREE.SphereGeometry(1, 64, 48),
-      new THREE.MeshStandardMaterial({ color: 0x2b5c8a, roughness: 0.9 }),
+      new THREE.MeshStandardMaterial({ color: 0x9fbcd2, roughness: 0.95 }),
     );
     const axis = new THREE.Mesh(
       new THREE.CylinderGeometry(0.006, 0.006, 2.5),
-      new THREE.MeshBasicMaterial({ color: 0x8a9bc8 }),
+      new THREE.MeshBasicMaterial({ color: 0x56637a }),
     );
     this.scene.add(earth, axis);
 
-    const cube = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), this.cubeMaterials);
+    const cube = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), this.cubeMaterials);
     const edges = new THREE.LineSegments(
       new THREE.EdgesGeometry(cube.geometry),
-      new THREE.LineBasicMaterial({ color: 0xc9d3ea }),
+      new THREE.LineBasicMaterial({ color: 0x0f1b2d }),
     );
     this.sat.add(cube, edges);
     this.scene.add(this.sat, this.dynamic);
@@ -210,7 +176,7 @@ export class OrbitView implements AfterViewInit, OnDestroy {
     this.updateSatellite();
     this.resize();
     window.addEventListener('resize', this.resize);
-    this.loop(0);
+    this.loop();
   }
 
   ngOnDestroy(): void {
@@ -218,11 +184,6 @@ export class OrbitView implements AfterViewInit, OnDestroy {
     window.removeEventListener('resize', this.resize);
     this.controls?.dispose();
     this.renderer?.dispose();
-  }
-
-  scrub(i: number): void {
-    this.playing.set(false);
-    this.index.set(i);
   }
 
   private readonly resize = () => {
@@ -233,12 +194,8 @@ export class OrbitView implements AfterViewInit, OnDestroy {
     this.camera.updateProjectionMatrix();
   };
 
-  private loop = (t: number) => {
+  private loop = () => {
     this.frame = requestAnimationFrame(this.loop);
-    if (this.playing() && t - this.lastStep > 60) {
-      this.lastStep = t;
-      this.index.set(this.index() >= this.last() ? 0 : this.index() + 1);
-    }
     this.controls?.update();
     this.renderer?.render(this.scene, this.camera);
   };
@@ -249,7 +206,7 @@ export class OrbitView implements AfterViewInit, OnDestroy {
     const o = this.o();
     const sun = this.sunDir();
 
-    const light = new THREE.DirectionalLight(0xffffff, 2.4);
+    const light = new THREE.DirectionalLight(0xffffff, 1.6);
     light.position.copy(sun.clone().multiplyScalar(10));
     this.dynamic.add(light);
 
@@ -257,20 +214,20 @@ export class OrbitView implements AfterViewInit, OnDestroy {
     const length = 3;
     const shadow = new THREE.Mesh(
       new THREE.CylinderGeometry(1, 1, length, 48, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0x3a4670, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }),
+      new THREE.MeshBasicMaterial({ color: 0x56637a, transparent: true, opacity: 0.1, side: THREE.DoubleSide, depthWrite: false }),
     );
     shadow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), sun.clone().negate());
     shadow.position.copy(sun.clone().multiplyScalar(-length / 2));
     this.dynamic.add(shadow);
 
     // Arrow towards the Sun.
-    this.dynamic.add(new THREE.ArrowHelper(sun, sun.clone().multiplyScalar(1.15), 0.9, cssColor('--warn', '#f2a33a').getHex(), 0.14, 0.08));
+    this.dynamic.add(new THREE.ArrowHelper(sun, sun.clone().multiplyScalar(1.15), 0.9, cssColor('--sun', '#d08a12').getHex(), 0.14, 0.08));
 
     // Orbit, one colour per sunlit/eclipse step.
     const positions: number[] = [];
     const colors: number[] = [];
-    const sunC = cssColor('--warn', '#f2a33a');
-    const shadeC = new THREE.Color(0x5a6a94);
+    const sunC = cssColor('--sun', '#d08a12');
+    const shadeC = cssColor('--text', '#0f1b2d');
     o.hours.forEach((_, i) => {
       const p = toWorld(o.x_km[i], o.y_km[i], o.z_km[i]);
       positions.push(p.x, p.y, p.z);
@@ -291,7 +248,7 @@ export class OrbitView implements AfterViewInit, OnDestroy {
       if (normal.dot(sun) < 0) normal.negate();
       const side = sun.clone().cross(normal).normalize();
       this.camera.position.copy(
-        normal.multiplyScalar(5.0).add(side.multiplyScalar(2.2)).add(new THREE.Vector3(0, 1.2, 0)),
+        side.multiplyScalar(4.0).add(normal.multiplyScalar(2.8)).add(sun.clone().multiplyScalar(1.2)),
       );
       this.camera.lookAt(0, 0, 0);
       this.controls?.target.set(0, 0, 0);
@@ -306,9 +263,9 @@ export class OrbitView implements AfterViewInit, OnDestroy {
     this.sat.position.copy(toWorld(o.x_km[i], o.y_km[i], o.z_km[i]));
     this.sat.quaternion.copy(this.attitudeQuat());
 
-    const panel = new THREE.Color(0x34508f);
-    const lit = cssColor('--warn', '#f2a33a');
-    const failed = cssColor('--danger', '#ff5c6c');
+    const panel = new THREE.Color(0x2c3e5c);
+    const lit = cssColor('--sun', '#d08a12');
+    const failed = cssColor('--danger', '#c0392b');
     this.faceRows().forEach((row, k) => {
       const m = this.cubeMaterials[k];
       m.color.copy(row.failed ? failed.clone().multiplyScalar(0.55) : panel);

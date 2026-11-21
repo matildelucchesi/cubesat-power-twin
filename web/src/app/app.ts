@@ -1,20 +1,34 @@
-import { Component, computed, inject, signal } from '@angular/core';
-import { DecimalPipe, PercentPipe, DatePipe } from '@angular/common';
+import { Component, computed, effect, inject, signal } from '@angular/core';
+import { DatePipe, PercentPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
+import { BatteryGauge } from './battery-gauge';
 import { GroundTrack } from './ground-track';
 import { LineChart, Series } from './line-chart';
+import { OrbitPlane } from './orbit-plane';
 import { OrbitView } from './orbit-view';
+import { Playback, RATES } from './playback.service';
 import { Face, SimulationRequest, SimulationResult, SimulationService } from './simulation.service';
+
+/** One computed result, shown with the relation that produced it and the model used. */
+interface ResultCard {
+  label: string;
+  value: string;
+  unit: string;
+  formula: string;
+  chips: { text: string; tone?: 'ok' | 'warn' | 'bad' }[];
+}
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DecimalPipe, PercentPipe, DatePipe, LineChart, GroundTrack, OrbitView],
+  imports: [FormsModule, PercentPipe, DatePipe, LineChart, GroundTrack, OrbitView, OrbitPlane, BatteryGauge],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
 export class App {
   private readonly api = inject(SimulationService);
+  readonly playback = inject(Playback);
+  readonly rates = RATES;
 
   readonly faces: Face[] = ['+X', '-X', '+Y', '-Y', '+Z', '-Z'];
   readonly request: SimulationRequest = {
@@ -33,22 +47,97 @@ export class App {
   readonly ran = signal<SimulationRequest | null>(null);
   readonly loading = signal(false);
   readonly error = signal('');
+  readonly ranAt = signal<Date | null>(null);
 
+  /** Orbital period from the spacing of consecutive eclipses [min]. */
+  private readonly periodMin = computed(() => {
+    const e = this.result()?.eclipses ?? [];
+    if (e.length < 2) return null;
+    return (Date.parse(e[1].start) - Date.parse(e[0].start)) / 60000;
+  });
+
+  readonly cards = computed<ResultCard[]>(() => {
+    const r = this.result();
+    const q = this.ran();
+    if (!r || !q) return [];
+    const s = r.summary;
+    const margin = s.mean_power_w - s.mean_load_w;
+    const working = 6 - q.failed_faces.length;
+    const T = this.periodMin();
+    return [
+      {
+        label: 'Mean array power', value: s.mean_power_w.toFixed(2), unit: 'W',
+        formula: q.attitude === 'tumbling' ? 'P̄ = S·η·(A/4)·(1 − f_ecl)' : 'P̄ = S·η·A_face·(1 − f_ecl)',
+        chips: [{ text: q.attitude === 'tumbling' ? 'tumbling' : 'sun pointing' },
+                { text: `${working}/6 faces`, tone: working < 6 ? 'warn' : undefined }],
+      },
+      {
+        label: 'Mean load', value: s.mean_load_w.toFixed(2), unit: 'W',
+        formula: 'P̄_load = Σ Pᵢ · dutyᵢ',
+        chips: [{ text: `TX ${Math.round(q.tx_duty_cycle * 100)} %` }],
+      },
+      {
+        label: 'Energy margin', value: (margin >= 0 ? '+' : '') + margin.toFixed(2), unit: 'W',
+        formula: 'P̄_array − P̄_load',
+        chips: [{ text: margin >= 0 ? 'positive' : 'negative', tone: margin >= 0 ? 'ok' : 'bad' }],
+      },
+      {
+        label: 'Time in shadow', value: (s.shadow_fraction * 100).toFixed(1), unit: '%',
+        formula: `${s.eclipses} eclipses / ${s.days} d`,
+        chips: [{ text: s.eclipse_model }],
+      },
+      {
+        label: 'Mean eclipse', value: s.mean_eclipse_min.toFixed(1), unit: 'min',
+        formula: T ? `per orbit of T = ${T.toFixed(1)} min` : 'complete eclipses only',
+        chips: [{ text: s.eclipse_model }],
+      },
+      {
+        label: 'Minimum state of charge', value: (s.min_soc * 100).toFixed(1), unit: '%',
+        formula: `min SOC(t), C = ${q.capacity_wh} Wh`,
+        chips: [{
+          text: s.min_soc < 0.3 ? 'below 30 %' : s.min_soc < 0.6 ? 'below 60 %' : 'healthy',
+          tone: s.min_soc < 0.3 ? 'bad' : s.min_soc < 0.6 ? 'warn' : 'ok',
+        }],
+      },
+    ];
+  });
+
+  readonly socSeries = computed<Series[]>(() => {
+    const r = this.result();
+    return r ? [{ label: 'State of charge', values: r.series.soc.map((s) => s * 100), color: 'var(--accent)' }] : [];
+  });
   readonly powerSeries = computed<Series[]>(() => {
     const r = this.result();
     return r
       ? [
-          { label: 'Solar array', values: r.series.power_w, color: 'var(--accent)' },
-          { label: 'Load', values: r.series.load_w, color: 'var(--warn)' },
+          { label: 'Solar array', values: r.series.power_w, color: 'var(--sun)' },
+          { label: 'Load', values: r.series.load_w, color: 'var(--text)' },
         ]
       : [];
   });
-  readonly socSeries = computed<Series[]>(() => {
+
+  /** Values at the current replay instant. */
+  readonly now = computed(() => {
     const r = this.result();
-    return r ? [{ label: 'State of charge', values: r.series.soc.map((s) => s * 100), color: 'var(--good)' }] : [];
+    if (!r) return null;
+    const o = r.orbit3d;
+    const i = Math.min(this.playback.index(), o.hours.length - 1);
+    const h = o.hours[i] ?? 0;
+    return {
+      i,
+      last: o.hours.length - 1,
+      clock: `T + ${Math.floor(h)} h ${String(Math.floor((h % 1) * 60)).padStart(2, '0')} min`,
+      lit: o.sunlit[i],
+      soc: o.soc[i],
+      net: o.power_w[i] - r.summary.mean_load_w,
+    };
   });
 
   constructor() {
+    effect(() => {
+      const o = this.result()?.orbit3d;
+      if (o && o.hours.length > 1) this.playback.load(o.hours.length, (o.hours[1] - o.hours[0]) * 3600);
+    });
     this.run();
   }
 
@@ -66,10 +155,11 @@ export class App {
       next: (r) => {
         this.result.set(r);
         this.ran.set(request);
+        this.ranAt.set(new Date());
         this.loading.set(false);
       },
       error: (e) => {
-        this.error.set(e.error?.detail ? JSON.stringify(e.error.detail) : 'Backend not reachable. Is uvicorn running?');
+        this.error.set(e.error?.detail ? JSON.stringify(e.error.detail) : 'Backend not reachable. Start it with: uvicorn api:app --app-dir src/cubesat_twin');
         this.loading.set(false);
       },
     });
