@@ -114,3 +114,6 @@ th { color: var(--muted); font: 600 11px var(--f-body); text-transform: uppercas
 .delta { font: 500 11.5px var(--f-data); color: var(--muted); }
 .delta.good { color: var(--good); }
 .delta.bad { color: var(--danger); }
+
+.col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.closeup { width: 100%; aspect-ratio: 16 / 10; display: block; background: var(--canvas); border: 1px solid var(--border); }

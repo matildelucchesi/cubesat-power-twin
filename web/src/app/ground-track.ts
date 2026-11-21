@@ -60,9 +60,9 @@ const wrap = (lon: number) => ((((lon + 180) % 360) + 360) % 360) - 180;
       }
     </svg>
     <div class="legend">
-      <span><i class="l-track"></i>Next 24 h</span>
+      <span><i class="l-track"></i>First 24 h of the run</span>
       <span><i class="l-trail"></i>Last 30 min</span>
-      <span><i class="l-foot"></i>Footprint, satellite above the horizon</span>
+      <span><i class="l-foot"></i>Footprint: ground where the CubeSat is above the horizon</span>
       <span><i class="l-night"></i>Night side</span>
       <span><i class="l-sun"></i>Sub-solar point</span>
     </div>

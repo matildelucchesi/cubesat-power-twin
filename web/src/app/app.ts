@@ -91,7 +91,9 @@ export class App {
     const cards: ResultCard[] = [
       {
         label: 'Mean array power', value: s.mean_power_w.toFixed(2), unit: 'W',
-        formula: q.attitude === 'tumbling' ? 'P̄ = S·η·(A/4)·(1 − f_ecl)' : 'P̄ = S·η·A_face·(1 − f_ecl)',
+        formula: q.attitude === 'tumbling'
+          ? `P̄ = S·η·(A${q.deployables ? ' + A_wings' : ''})/4·(1 − f_ecl)`
+          : `P̄ = S·η·(A_face${q.deployables ? ' + A_wings' : ''})·(1 − f_ecl)`,
         chips: [{ text: q.attitude === 'tumbling' ? 'tumbling' : 'sun pointing' },
                 { text: `${working}/6 faces`, tone: working < 6 ? 'warn' : undefined }],
       },
@@ -107,13 +109,13 @@ export class App {
       },
       {
         label: 'Time in shadow', value: (s.shadow_fraction * 100).toFixed(1), unit: '%',
-        formula: `${s.eclipses} eclipses / ${s.days} d`,
-        chips: [{ text: s.eclipse_model }],
+        formula: `${s.eclipses} complete eclipses in ${s.days} d`,
+        chips: [{ text: this.modelNote() }],
       },
       {
         label: 'Mean eclipse', value: s.mean_eclipse_min.toFixed(1), unit: 'min',
         formula: T ? `per orbit of T = ${T.toFixed(1)} min` : 'complete eclipses only',
-        chips: [{ text: s.eclipse_model }],
+        chips: [{ text: this.modelNote() }],
       },
       {
         label: 'Minimum state of charge', value: (s.min_soc * 100).toFixed(1), unit: '%',
@@ -144,12 +146,37 @@ export class App {
     return b ? [{ label: `Baseline array · ${b.label}`, x: b.result.series.hours, values: b.result.series.power_w, color: 'var(--muted)' }] : [];
   });
 
+  /** Name of the orbit the CubeSat flies: the preset name, or the TLE name for a custom NORAD number. */
+  readonly orbitName = computed(() => {
+    const r = this.result();
+    if (!r) return 'FUNcube-1 (AO-73)';
+    const norad = r.spacecraft?.norad;
+    return this.catalog()?.satellites.find((s) => s.norad === norad)?.name ?? r.summary.satellite;
+  });
+
+  /** Page title: what is simulated (a CubeSat) and whose orbit it flies. */
+  readonly title = computed(() => {
+    const q = this.ran();
+    const ff = q?.form_factor ?? '1U';
+    return `${ff} CubeSat on the ${this.orbitName()} orbit`;
+  });
+
+  /** The eclipse model actually used; skyfield falls back to cylindrical without its ephemeris file. */
+  readonly modelNote = computed(() => {
+    const r = this.result();
+    const q = this.ran();
+    if (!r || !q) return '';
+    return q.eclipse_model === 'skyfield' && r.summary.eclipse_model === 'cylindrical'
+      ? 'cylindrical (skyfield ephemeris unavailable)'
+      : r.summary.eclipse_model;
+  });
+
   /** Short description of the current run, used as the baseline label. */
   readonly runLabel = computed(() => {
     const r = this.result();
     const q = this.ran();
     if (!r || !q) return '';
-    const parts = [r.summary.satellite, q.form_factor + (q.deployables ? ' + wings' : ''), q.attitude === 'tumbling' ? 'tumbling' : 'sun pointing'];
+    const parts = [`${q.form_factor}${q.deployables ? ' + wings' : ''} on ${this.orbitName()} orbit`, q.attitude === 'tumbling' ? 'tumbling' : 'sun pointing'];
     if (q.failed_faces.length) parts.push(`${q.failed_faces.length} failed`);
     return parts.join(' · ');
   });
@@ -188,7 +215,7 @@ export class App {
     return {
       i,
       last: o.hours.length - 1,
-      met: `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}`,
+      elapsed: `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}`,
       utc: t.toISOString().slice(11, 16),
       lit: o.sunlit[i],
       soc: o.soc[i],

@@ -42,8 +42,9 @@ power and the battery charge at the selected time.
 
 The dashboard is built to compare scenarios, not to show a single case.
 
-- **Orbit**: pick a preset (FUNcube-1 in a sun-synchronous 97.8° orbit, the ISS orbit at 51.6°,
-  Hubble at 28.5°) or type any NORAD number. The TLE is downloaded from CelesTrak and cached for a
+- **Orbit**: fly the CubeSat on the orbit of a preset object (FUNcube-1, sun-synchronous at 97.8°;
+  the ISS, 51.6°; Hubble, 28.5°) or of any NORAD number. Only the orbit is borrowed: the simulated
+  spacecraft is always the CubeSat you configure. The TLE is downloaded from CelesTrak and cached for a
   day; the bundled FUNcube-1 TLE keeps the app working offline. The run starts at the TLE epoch,
   where SGP4 is most accurate.
 - **Form factor**: 1U, 3U or 6U body with optional deployable panels
