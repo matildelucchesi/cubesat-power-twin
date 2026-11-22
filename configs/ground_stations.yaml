@@ -1,0 +1,34 @@
+# Ground stations used for the DTN contact plan.
+# Coordinates of ESA ESTRACK sites (rounded). A real 1U CubeSat would talk to
+# amateur or university UHF stations; the ESTRACK sites are used here because
+# their geography (polar, mid-latitude, southern hemisphere) is representative.
+# node: the IPN node number the station has in the DTN network (ipn:<node>.*).
+
+spacecraft_node: 1
+
+stations:
+  - name: Kiruna
+    node: 10
+    lat_deg: 67.857
+    lon_deg: 20.964
+    alt_m: 402
+  - name: Redu
+    node: 11
+    lat_deg: 50.002
+    lon_deg: 5.146
+    alt_m: 385
+  - name: Santa Maria
+    node: 12
+    lat_deg: 36.997
+    lon_deg: -25.136
+    alt_m: 276
+  - name: Malargue
+    node: 13
+    lat_deg: -35.776
+    lon_deg: -69.398
+    alt_m: 1550
+  - name: New Norcia
+    node: 14
+    lat_deg: -31.048
+    lon_deg: 116.191
+    alt_m: 252
