@@ -1,0 +1,8 @@
+/* Health panel: reuses app.css, adds the assistant box and the recommended row. */
+:host { display: block; }
+tr.rec td { font-weight: 600; background: color-mix(in srgb, var(--good) 8%, white); }
+.ask { display: flex; gap: 8px; margin-bottom: 12px; }
+.ask input { flex: 1; min-width: 0; font: 13px var(--f-body); padding: 7px 10px; border: 1px solid var(--border); background: var(--panel); color: var(--text); }
+.answer { background: var(--panel); border: 1px solid var(--border); padding: 12px 14px; }
+.answer p { margin: 0 0 6px; line-height: 1.5; white-space: pre-line; }
+.card .hint { line-height: 1.35; }

@@ -135,3 +135,6 @@ th { color: var(--muted); font: 600 11px var(--f-body); text-transform: uppercas
 .check input#safe { accent-color: var(--accent); }
 .hint.warn { color: var(--danger); }
 .telemetry .safe-pill { background: var(--danger); color: var(--panel); }
+
+/* View switch in the header */
+.views button { padding: 6px 14px; flex: none; }
