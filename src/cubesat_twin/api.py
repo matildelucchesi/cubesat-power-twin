@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
 from eclipse import find_eclipses, sun_direction
+from telemetry import FAULT_KINDS, Scenario
 from simulation import load_config, run, summary
 from tle import PRESETS, Tle, TleUnavailable, get_tle
 
@@ -158,3 +159,72 @@ def simulate(req: SimulationRequest) -> dict:
             for e in eclipses.head(20).itertuples()
         ],
     }
+
+
+class HealthRequest(BaseModel):
+    """A health-monitoring scenario: synthetic telemetry with one injected fault."""
+    fault: Literal[FAULT_KINDS] = "array_degradation"
+    magnitude: float | None = Field(None, ge=0, le=2, description=(
+        "Fault size: fraction of a face lost (string_loss), fraction lost per day "
+        "(array_degradation, capacity_fade) or extra watts (load_anomaly). Default per fault."))
+    onset_h: float = Field(72, ge=50, description="Fault start, hours after the first sample")
+    days: float = Field(10, ge=4, le=20, description="Telemetry received so far [days]")
+    horizon_days: float = Field(10, ge=1, le=20, description="Prognosis horizon [days]")
+    tx_duty: float = Field(0.5, ge=0, le=1, description="Transmitter duty cycle in operations")
+    seed: int = Field(7, ge=0, le=10_000, description="Random seed (tumbling, noise, cells)")
+
+    @model_validator(mode="after")
+    def onset_inside(self):
+        if self.fault != "nominal" and self.onset_h >= self.days * 24:
+            raise ValueError("onset_h must fall inside the telemetry span (days * 24)")
+        return self
+
+    def key(self) -> tuple:
+        return tuple(self.model_dump().values())
+
+
+class ExplainRequest(HealthRequest):
+    question: str = Field("What is happening to the power system and what should I do?",
+                          max_length=500)
+
+
+@lru_cache(maxsize=8)
+def _health(key: tuple):
+    from health import DEFAULT_MAGNITUDE, run_health
+
+    req = HealthRequest(**dict(zip(HealthRequest.model_fields, key)))
+    mag = DEFAULT_MAGNITUDE[req.fault] if req.magnitude is None else req.magnitude
+    onset = float("inf") if req.fault == "nominal" else req.onset_h
+    return run_health(Scenario(req.fault, onset, mag, req.seed), req.days, req.horizon_days,
+                      req.tx_duty, return_context=True)
+
+
+@app.get("/api/health/benchmark")
+def health_benchmark() -> dict:
+    """Detection and diagnosis scores of the methods, from the last benchmark run."""
+    import json
+    from pathlib import Path
+
+    path = Path("results/health_benchmark.json")
+    if not path.exists():
+        raise HTTPException(404, "Run python src/cubesat_twin/health_benchmark.py first.")
+    return json.loads(path.read_text())
+
+
+@app.post("/api/health")
+def health(req: HealthRequest) -> dict:
+    """Synthetic telemetry with a fault, the synchronised twin's estimates,
+    the alarms of each detection method, the prognosis and the action study."""
+    return _health(req.key())[0]
+
+
+@app.post("/api/health/explain")
+def health_explain(req: ExplainRequest) -> dict:
+    """Plain-language explanation of the health report by the operator
+    assistant (Claude, with the twin's what-if forecast as a tool). Falls
+    back to a template explanation without an Anthropic credential."""
+    from assistant import explain
+
+    base = HealthRequest(**req.model_dump(exclude={"question"}))
+    report, what_if = _health(base.key())
+    return explain(report, req.question, what_if)

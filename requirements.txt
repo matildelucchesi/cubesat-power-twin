@@ -7,3 +7,5 @@ fastapi
 uvicorn[standard]
 httpx
 pytest
+scikit-learn
+anthropic

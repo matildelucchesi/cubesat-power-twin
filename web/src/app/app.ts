@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 
 import { BatteryGauge } from './battery-gauge';
 import { GroundTrack, LiveTrack } from './ground-track';
+import { HealthPanel } from './health-panel';
 import { Ghost, LineChart, Series } from './line-chart';
 import { OrbitPlane } from './orbit-plane';
 import { OrbitView } from './orbit-view';
@@ -29,7 +30,7 @@ interface Baseline {
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, PercentPipe, DatePipe, LineChart, GroundTrack, OrbitView, OrbitPlane, BatteryGauge],
+  imports: [FormsModule, PercentPipe, DatePipe, LineChart, GroundTrack, OrbitView, OrbitPlane, BatteryGauge, HealthPanel],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -44,6 +45,8 @@ export class App {
   /** 'preset' shows the list, 'custom' shows a NORAD number field. */
   readonly orbitMode = signal<'preset' | 'custom'>('preset');
   readonly baseline = signal<Baseline | null>(null);
+  /** Which page is shown: the power simulation or health monitoring. */
+  readonly view = signal<'power' | 'health'>('power');
 
   readonly request: SimulationRequest = {
     norad: 39444,

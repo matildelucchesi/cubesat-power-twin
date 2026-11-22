@@ -9,7 +9,10 @@ asks every day: **will the battery hold?** To answer it, the twin:
 2. finds when the spacecraft is in the Earth's shadow;
 3. computes how much power the solar cells produce in sunlight;
 4. subtracts what the subsystems consume and follows the battery charge over days;
-5. optionally runs an on-board safe mode that switches loads off when the battery runs low.
+5. optionally runs an on-board safe mode that switches loads off when the battery runs low;
+6. keeps itself synchronised with telemetry, estimates what no sensor measures, detects and
+   diagnoses faults, forecasts when the battery will reach safe mode and compares corrective
+   actions ([health monitoring](#health-monitoring-from-simulator-to-digital-twin)).
 
 A Python core does the physics, a FastAPI backend exposes it, and an Angular dashboard with a
 Three.js 3D view lets you run what-if scenarios: a different CubeSat size, deployable solar
@@ -21,6 +24,7 @@ panels, failed panels, another orbit, safe mode on or off.
 
 - [The physics, step by step](#the-physics-step-by-step)
 - [Results](#results)
+- [Health monitoring: from simulator to digital twin](#health-monitoring-from-simulator-to-digital-twin)
 - [Using it as a study tool](#using-it-as-a-study-tool)
 - [Software architecture](#software-architecture)
 - [Run it](#run-it)
@@ -156,6 +160,109 @@ Mean generated power for each size (7 days, same orbit):
 A 1U without deployables produces more power tumbling than sun pointing: its six faces collect
 1.5 face-areas on average, while sun pointing shows only one face to the Sun.
 
+## Health monitoring: from simulator to digital twin
+
+A simulator runs from datasheet values. A digital twin is kept **synchronised with the real
+spacecraft**, so it can reason about things the telemetry does not show directly. Spacecraft
+health monitoring still relies mostly on fixed limits on telemetry channels. The **Health
+monitoring** view of the dashboard and the modules below go one step further: detection,
+diagnosis, prognosis and decision support on top of the synchronised twin.
+
+![Health monitoring view](docs/health.png)
+
+### 1. Telemetry with known faults (`telemetry.py`)
+
+Real CubeSat telemetry with labelled faults is hard to find, so a **truth model** plays the
+spacecraft. It is deliberately richer than the twin, and the twin does not know its parameters:
+
+- real tumbling about a random axis, so the array power swings with the angle of each face;
+- battery cells 0 to 8 % below datasheet capacity, and an uncertain internal resistance;
+- a transmitter switched on and off in blocks, plus the hysteresis safe mode;
+- array curtailment: with a full battery the power system takes from the array only what the
+  loads draw;
+- sensor noise on every channel, and a battery voltage that follows a Li-ion open-circuit
+  voltage curve.
+
+It reports what an EPS reports: array power, load power, battery voltage and current, and the
+transmitter and safe-mode flags. Faults are injected at a known time:
+
+| Fault | What changes | Example |
+| --- | --- | --- |
+| `string_loss` | part or all of one face's cells stop producing | a broken cell string |
+| `array_degradation` | array output drops by a fraction per day | radiation or contamination, accelerated |
+| `capacity_fade` | battery capacity drops by a fraction per day | cell ageing, accelerated |
+| `load_anomaly` | constant extra load | a heater stuck on |
+
+### 2. Synchronisation and estimation (`estimation.py`)
+
+Kalman filters keep the twin aligned with the telemetry, and estimate quantities that **no sensor
+measures**, each with its uncertainty:
+
+- **state of charge and battery capacity**: an extended Kalman filter on [SOC, 1/capacity].
+  Integrating the current (coulomb counting) predicts how the SOC moves, and the voltage (through
+  the open-circuit voltage curve) says where it really is. The mismatch between the two reveals
+  the capacity;
+- **array factor**: measured over predicted array power (1 = as designed). Only samples where
+  the battery is clearly below full charge are used: when it is full the array is curtailed, and
+  the measurement no longer says what the array could give;
+- **load bias**: measured load minus the load expected from the reported modes.
+
+### 3. Detection and diagnosis (`detection.py`)
+
+Four methods run on the same telemetry, once per orbit:
+
+1. **limit checking**, the classic approach: low battery voltage, high load power;
+2. **twin + CUSUM**: a cumulative-sum test on the drift of the twin's parameters since a 48-hour
+   calibration period, each drift divided by the filter's own uncertainty. The channel that
+   alarms names the subsystem;
+3. **twin + ML**: a random forest classifies each orbit from the twin's estimates and their trends,
+   and names the fault type. A lost cell string and gradual degradation both lower the array
+   factor, but the first one is a step and also changes the spread of the tumbling power, while
+   the second one is a ramp;
+4. **twin + CUSUM + ML**: the CUSUM decides *when* (few false alarms) and the classifier decides
+   *what*.
+
+`python src/cubesat_twin/health_benchmark.py 60` trains the classifier on 300 synthetic runs and
+scores the methods on 150 other runs (different seeds, fault sizes and onset times; 12 days each,
+fault sizes from barely visible to large):
+
+| Method | Detected | False alarms | Median delay | Right subsystem | Right fault type |
+| --- | --- | --- | --- | --- | --- |
+| Limit checking | 18 % | 0 % | 1.2 h | 100 % | 100 % |
+| Twin + CUSUM | 78 % | 1 % | 45.6 h | 98 % | - |
+| Twin + ML | 76 % | 23 % | 27.4 h | 88 % | 82 % |
+| **Twin + CUSUM + ML** | **78 %** | **1 %** | 45.6 h | **98 %** | **97 %** |
+
+Limit checking only catches the larger stuck-on loads. The 1U CubeSat has a large power margin,
+so a degrading array or a fading battery never pushes a channel past a limit until it is too late.
+The twin sees all four fault types. The classifier alone reacts sooner but raises false alarms,
+so the hybrid keeps the CUSUM's reliability and adds the classifier's diagnosis. The delay is
+dominated by the slow faults (about 100 h for degradation of 1 to 4 % per day). Abrupt faults are
+caught in hours: 2 h for a stuck load, 31 h median for a lost string.
+
+### 4. Prognosis and decision (`prognosis.py`)
+
+From the synchronised state and the recent trends of the array factor and capacity, a Monte Carlo
+ensemble of forward runs on the predicted orbit gives the distribution of the **time left before
+safe mode**. Because the truth model keeps running after the last telemetry sample, the forecast
+can be checked. For 3 %/day array degradation starting at hour 72, the forecast made at day 10
+gives a 36 % probability of safe mode within 10 days, with a median of 226 h. In the truth model
+it happens after 216 h.
+
+The same ensemble, rerun for lower transmitter duty cycles, closes the loop
+detection → diagnosis → prognosis → action. The twin recommends the highest duty cycle (the most
+data downlinked) whose risk of safe mode stays below 10 %; in that case, 25 %.
+
+### 5. Operator assistant (`assistant.py`)
+
+`POST /api/health/explain` gives the health report to Claude, which can call the twin's what-if
+forecast as a tool, and returns a short explanation for the operator: what happened, how sure the
+twin is, how much time is left and what to do. The numbers always come from the twin; the model
+explains them and checks an action with a what-if run before recommending it. The loop is the plain
+Messages API with one client tool, bounded to four rounds. It needs an Anthropic credential on the
+backend (`ANTHROPIC_API_KEY` or an `ant auth login` profile). Without one, the endpoint answers with
+a template explanation built from the same report.
+
 ## Using it as a study tool
 
 The dashboard is built to compare scenarios, not to show a single case.
@@ -186,7 +293,13 @@ The dashboard is built to compare scenarios, not to show a single case.
 | Battery | `battery.py` | Energy balance with efficiencies |
 | Safe mode | `safe_mode.py` | Hysteresis controller and closed-loop simulation |
 | Simulation | `simulation.py` | Chains the blocks from a YAML configuration |
-| API | `api.py` | FastAPI: `/api/simulate`, `/api/catalog`, `/api/config`; OpenAPI docs at `/docs` |
+| Telemetry | `telemetry.py` | Truth model with tumbling, sensor noise and injected faults |
+| Estimation | `estimation.py` | EKF for SOC and capacity, Kalman filters for array factor and load bias |
+| Detection | `detection.py` | Limit checks, CUSUM on twin drifts, random-forest diagnosis, hybrid |
+| Prognosis | `prognosis.py` | Monte Carlo forecast of the time to safe mode, duty-cycle study |
+| Health | `health.py`, `health_benchmark.py` | End-to-end pipeline and benchmark on labelled runs |
+| Assistant | `assistant.py` | Claude explains the health report, with the twin's what-if as a tool |
+| API | `api.py` | FastAPI: `/api/simulate`, `/api/catalog`, `/api/config`, `/api/health`, `/api/health/explain`, `/api/health/benchmark`; OpenAPI docs at `/docs` |
 | Dashboard | `web/` | Angular (signals), hand-drawn SVG charts, Three.js 3D view |
 
 All code is in `src/cubesat_twin/`, the tests in `tests/` (unit tests for each block and API
@@ -205,6 +318,9 @@ pytest -q                                  # unit and API tests
 python src/cubesat_twin/simulation.py      # 7-day run: summary, results/simulation.csv, results/power_soc.png
 python src/cubesat_twin/eclipse.py         # skyfield vs cylindrical eclipse model
 python docs/make_figures.py                # README figures
+
+python src/cubesat_twin/health_benchmark.py 60       # train the diagnosis model, score the four methods
+python src/cubesat_twin/health.py array_degradation  # one fault end to end: alarms, estimates, prognosis
 ```
 
 Dashboard (two terminals):
@@ -225,11 +341,20 @@ cd web && npm install && npx ng serve                  # http://localhost:4200
   CubeSats without deployables typically average about 2 W, a little below the 2.8 W here.
 - Loads are a constant average per mode; no ground-station passes.
 - Safe mode sheds a fixed set of loads; there is no smarter load scheduling.
+- Health monitoring is evaluated on synthetic telemetry from a truth model, not on real
+  housekeeping data. The truth model is richer than the twin, but simpler than a real spacecraft
+  (no temperature, no battery ageing within a day, no telemetry gaps). The faults are accelerated
+  so that they show within days.
+- The prognosis assumes a linear trend of the degradation it has seen; a fault that starts after
+  the last telemetry sample is not foreseen.
 
 ## Physics or machine learning?
 
 The physics model comes first: orbit, eclipses and panel geometry are well known, and a
 physical model explains its results and extrapolates to unseen cases such as a failed panel.
 The uncertain parts (cell temperature, degradation, real attitude and consumption) are where
-a data-driven correction trained on real telemetry could reduce the residual error. That
-hybrid step is planned once telemetry is available.
+data helps. The health-monitoring layer is that hybrid step. Kalman filters correct the physical
+model with telemetry and estimate its unknown parameters. Machine learning works on the twin's
+residuals and estimates rather than on raw telemetry, which is why it can tell a lost cell string
+from gradual degradation. The next step is to run the same pipeline on real CubeSat housekeeping
+telemetry.

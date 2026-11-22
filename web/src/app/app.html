@@ -4,12 +4,19 @@
     <h1>CubeSat power digital twin</h1>
     <p class="scenario">Current run: {{ scenario() }}</p>
   </div>
+  <div class="seg views" role="tablist" aria-label="View">
+    <button type="button" role="tab" [attr.aria-pressed]="view() === 'power'" (click)="view.set('power')">Power simulation</button>
+    <button type="button" role="tab" [attr.aria-pressed]="view() === 'health'" (click)="view.set('health')">Health monitoring</button>
+  </div>
   <p class="meta">
     <span>Orbit from TLE · SGP4</span>
     @if (ranAt(); as t) { <span>Run {{ t | date: 'MMM d, HH:mm' }}</span> }
   </p>
 </header>
 
+@if (view() === 'health') {
+<app-health-panel />
+} @else {
 <div class="body">
   <form class="side" (ngSubmit)="run()">
     <h2>Spacecraft</h2>
@@ -273,3 +280,4 @@
     <main><p class="empty">Propagating the orbit and simulating the battery…</p></main>
   }
 </div>
+}
