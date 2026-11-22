@@ -49,10 +49,7 @@ def run(config: dict) -> pd.DataFrame:
                                     array.get("deployable", 0.0))
     bat = config["battery"]
     safe = config.get("safe_mode", {})
-    dtn = config.get("dtn", {})
-    if dtn.get("enabled"):
-        _run_dtn(df, name, l1, l2, config)
-    elif safe.get("enabled"):
+    if safe.get("enabled"):
         df["soc"], df["load_w"], df["safe"] = simulate_with_safe_mode(
             df.power_w, average_load(config["loads"]), safe_mode_load(config["loads"]),
             sim["step_s"], bat["capacity_wh"], bat["initial_soc"],
@@ -67,26 +64,6 @@ def run(config: dict) -> pd.DataFrame:
     df.attrs["name"] = name
     df.attrs["eclipse_model"] = model
     return df
-
-
-def _run_dtn(df: pd.DataFrame, name: str, l1: str, l2: str, config: dict) -> None:
-    """Contacts with the ground stations and the closed-loop store-and-forward
-    simulation. Adds the columns to df and keeps contacts and bundles in df.attrs."""
-    from contacts import find_contacts, load_stations, station_geometry, visible_station
-    from dtn import simulate_dtn
-
-    dtn, step_s = config["dtn"], config["simulation"]["step_s"]
-    sc_node, stations = load_stations(dtn["ground_stations"])
-    elevation, distance = station_geometry(name, l1, l2, df.time, stations)
-    idx = visible_station(elevation, dtn["min_elevation_deg"])
-    series, bundles = simulate_dtn(df.power_w, idx, step_s, config["loads"], config["battery"],
-                                   dtn, config.get("safe_mode"))
-    for col in series:
-        df[col] = series[col].values
-    df["station"] = [stations[i].name if i >= 0 else "" for i in idx]
-    df.attrs["contacts"] = find_contacts(df.time, idx, elevation, distance, stations, step_s)
-    df.attrs["bundles"] = bundles
-    df.attrs["spacecraft_node"] = sc_node
 
 
 def summary(df: pd.DataFrame) -> dict:

@@ -35,22 +35,3 @@ loads:                         # average power per subsystem [W]
   radio_rx: 0.3
   radio_tx: 1.0                # transmitter, used duty_cycle of the time
   radio_tx_duty_cycle: 0.5
-
-# Delay/disruption tolerant networking (store-and-forward) model.
-# When enabled, the transmitter is no longer on for a fixed duty cycle: it is
-# on only while a ground station is in view and there are bundles to send,
-# and radio_tx_duty_cycle above is ignored.
-dtn:
-  enabled: false
-  ground_stations: configs/ground_stations.yaml
-  min_elevation_deg: 10
-  downlink_bps: 9600           # UHF GMSK, a common 1U CubeSat downlink
-  uplink_bps: 1200
-  link_efficiency: 0.7         # framing, coding and retransmissions
-  housekeeping_bps: 16         # telemetry, generated all the time
-  payload_bps: 512             # science data, not generated in safe mode
-  bundle_bytes: 4096           # application data units are packed in bundles of this size
-  bundle_lifetime_h: 48        # a bundle not delivered within its lifetime is discarded
-  storage_bytes: 4000000       # on-board bundle storage
-  policy: energy_aware         # energy_aware | always
-  tx_min_soc: 0.5              # energy_aware: no downlink below this state of charge
