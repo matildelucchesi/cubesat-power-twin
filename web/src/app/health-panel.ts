@@ -1,7 +1,8 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { Explanation, FaultKind, HealthReport, HealthRequest, HealthService } from './health.service';
+import { AssistantChat } from './assistant-chat';
+import { FaultKind, HealthReport, HealthRequest, HealthService } from './health.service';
 import { LineChart, Series } from './line-chart';
 
 const FAULTS: { kind: FaultKind; label: string; unit: string; step: number; def: number }[] = [
@@ -22,11 +23,11 @@ const METHODS: Record<string, { name: string; how: string }> = {
 /**
  * Health monitoring: synthetic telemetry with an injected fault, the twin kept in
  * sync by Kalman filters, four detection methods side by side, the prognosis and
- * the operator assistant.
+ * the operator assistant (a floating chat).
  */
 @Component({
   selector: 'app-health-panel',
-  imports: [FormsModule, LineChart],
+  imports: [AssistantChat, FormsModule, LineChart],
   styleUrls: ['./app.css', './health-panel.css'],
   template: `
 <div class="body">
@@ -139,27 +140,12 @@ const METHODS: Record<string, { name: string; how: string }> = {
         </table>
       </section>
 
-      <section>
-        <h2>Ask the operator assistant</h2>
-        <form class="ask" (ngSubmit)="ask()">
-          <input name="q" [(ngModel)]="question" aria-label="Question for the assistant" />
-          <button class="ghost" type="submit" [disabled]="asking()">{{ asking() ? 'Thinking…' : 'Ask' }}</button>
-        </form>
-        @if (answer(); as ans) {
-          <div class="answer">
-            <p>{{ ans.text }}</p>
-            <p class="hint">
-              {{ ans.source === 'model' ? 'Written by Claude from the twin report' : 'Template answer (no Anthropic credential configured on the backend)' }}
-              @for (t of ans.tool_calls; track $index) { · what-if at {{ (t.input.tx_duty * 100).toFixed(0) }} % duty cycle }
-            </p>
-          </div>
-        }
-      </section>
     </main>
   } @else {
     <main><p class="empty">{{ loading() ? 'Generating telemetry, synchronising the twin, running the forecast…' : 'Choose a fault and run the health check.' }}</p></main>
   }
 </div>
+<app-assistant-chat [request]="ranWith()" />
   `,
 })
 export class HealthPanel {
@@ -170,14 +156,11 @@ export class HealthPanel {
   readonly req: HealthRequest = {
     fault: 'array_degradation', magnitude: 0.03, onset_h: 72, days: 10, horizon_days: 10, tx_duty: 0.5, seed: 7,
   };
-  question = 'What is happening to the power system and what should I do?';
 
   readonly report = signal<HealthReport | null>(null);
   readonly ranWith = signal<HealthRequest | null>(null);
   readonly loading = signal(false);
   readonly error = signal('');
-  readonly answer = signal<Explanation | null>(null);
-  readonly asking = signal(false);
   private readonly faultKind = signal<FaultKind>(this.req.fault);
   readonly fault = computed(() => FAULTS.find((f) => f.kind === this.faultKind())!);
 
@@ -194,21 +177,15 @@ export class HealthPanel {
   run() {
     this.loading.set(true);
     this.error.set('');
-    this.answer.set(null);
     const r = { ...this.req };
     this.api.run(r).subscribe({
       next: (rep) => { this.report.set(rep); this.ranWith.set(r); this.loading.set(false); },
-      error: (e) => { this.error.set(e?.error?.detail ? JSON.stringify(e.error.detail) : 'Backend not reachable'); this.loading.set(false); },
-    });
-  }
-
-  ask() {
-    const r = this.ranWith();
-    if (!r) return;
-    this.asking.set(true);
-    this.api.explain(r, this.question).subscribe({
-      next: (a) => { this.answer.set(a); this.asking.set(false); },
-      error: () => { this.asking.set(false); },
+      error: (e) => {
+        this.error.set(e?.error?.detail ? JSON.stringify(e.error.detail)
+          : e?.status === 0 ? 'Backend not reachable. Start it with: uvicorn api:app --app-dir src/cubesat_twin'
+          : `The backend returned an error (${e?.status}). See the uvicorn terminal for the traceback.`);
+        this.loading.set(false);
+      },
     });
   }
 

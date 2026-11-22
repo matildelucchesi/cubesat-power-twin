@@ -263,6 +263,12 @@ Messages API with one client tool, bounded to four rounds. It needs an Anthropic
 backend (`ANTHROPIC_API_KEY` or an `ant auth login` profile). Without one, the endpoint answers with
 a template explanation built from the same report.
 
+In the dashboard the assistant is a floating chat: a button fixed at the bottom right of the Health
+view opens it, with suggested questions and the conversation about the report on screen. A new
+health check starts a new conversation.
+
+![Operator assistant chat](docs/health-assistant.png)
+
 ## Using it as a study tool
 
 The dashboard is built to compare scenarios, not to show a single case.
