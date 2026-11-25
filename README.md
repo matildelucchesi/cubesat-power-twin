@@ -15,7 +15,8 @@ asks every day: **will the battery hold?** To answer it, the twin:
    actions ([health monitoring](#health-monitoring-from-simulator-to-digital-twin));
 7. is checked against a real spacecraft: the telemetry that **FUNcube-1 (AO-73)** sent from
    orbit, received by SatNOGS ground stations
-   ([real-data mode](#real-data-mode-the-twin-aligned-with-funcube-1)).
+   ([real-data mode](#real-data-mode-the-twin-aligned-with-funcube-1)), including how much its
+   solar array has aged from 2021 to 2026.
 
 The program has two modes. The **simulated** mode (Power simulation and Health monitoring
 views) flies a configurable CubeSat and generates its own telemetry. The **real-data** mode
@@ -24,12 +25,25 @@ synchronises it.
 
 A Python core does the physics, a FastAPI backend exposes it, and an Angular dashboard with a
 Three.js 3D view lets you run what-if scenarios: a different CubeSat size, deployable solar
-panels, failed panels, another orbit, safe mode on or off.
+panels, solar-array failures (failed faces, a stuck wing, a lost string, radiation degradation),
+another orbit, safe mode on or off.
 
 ![Dashboard](docs/dashboard.png)
 
+## Why I built it
+
+This digital twin started from my project for the **Laboratory of Automatic Control** exam,
+[satellite-simulation](https://github.com/matildelucchesi/satellite-simulation). That project
+simulates a satellite in orbit, including when it enters the Earth's shadow. Once eclipses were
+there, I was curious about what they mean for the battery. How much energy is lost in the dark,
+does the battery recover in sunlight, and what happens when something fails? So I developed the
+project in that direction. I took the orbit and the eclipses as the starting point and built the
+power system on top of them: solar array, loads, battery and safe mode. Then I made it a digital
+twin, synchronised with telemetry, with fault detection, and checked against a real CubeSat.
+
 ## Contents
 
+- [Why I built it](#why-i-built-it)
 - [The physics, step by step](#the-physics-step-by-step)
 - [Results](#results)
 - [Health monitoring: from simulator to digital twin](#health-monitoring-from-simulator-to-digital-twin)
@@ -425,16 +439,23 @@ would cover the steepest early ageing, is not in SatNOGS.
 
 The dashboard is built to compare scenarios, not to show a single case.
 
-- **Orbit**: fly the CubeSat on the orbit of a preset object (FUNcube-1, sun-synchronous at 97.8°;
-  the ISS, 51.6°; Hubble, 28.5°) or of any NORAD number. Only the orbit is borrowed: the simulated
-  spacecraft is always the CubeSat you configure. The TLE is cached for a day, and a bundled
+- **Orbit**: FUNcube-1 (sun-synchronous, 97.8°) is the reference: a real 1U CubeSat, and choosing
+  it sets the form factor to 1U. The ISS (51.6°), Hubble (28.5°) or any NORAD number are what-if
+  orbits: only their orbit is borrowed, and the simulated spacecraft is always the CubeSat you
+  configure. The TLE is cached for a day, and a bundled
   FUNcube-1 TLE keeps the app working offline.
 - **Form factor**: 1U, 3U or 6U body, with optional deployable panels (`configs/form_factors.yaml`).
-- **Failed panels**: pick which faces stop producing; the 3D model labels each face.
+- **Failure scenarios**: typical solar-array failures of small satellites, chosen from a list:
+  one deployable wing stuck (drawn folded in the 3D view), an EPS channel lost (±X faces dark
+  together), one cell string open on a face (half of +X), radiation degradation (−15 % on every
+  cell). A custom option lets you pick which faces stop producing; the 3D model labels each face.
 - **Baseline**: save a run as baseline; the next runs show the difference on every result card and
   overlay the baseline on the charts.
 - **Safe mode**: switch it on and change the thresholds.
-- **Replay**: telemetry strip, 3D view, CubeSat close-up, to-scale orbit plane, battery gauge and
+- **Real telemetry**: a third view switches from the simulated CubeSat to FUNcube-1. It shows
+  the eclipse timing, the parameters the filters estimated and, for any pass, the real battery and
+  array against the generic and synchronised twins.
+- **Replay**: a progress bar, telemetry strip, 3D view, CubeSat close-up, to-scale orbit plane, battery gauge and
   live ground track all follow one clock (60×, 300× or 1000× real time).
 
 ![3D view](docs/orbit-3d.png)
@@ -502,8 +523,11 @@ cd web && npm install && npx ng serve                  # http://localhost:4200
 
 - Spacecraft parameters are representative of commercial CubeSat parts, not of one mission.
 - Attitude is either a tumbling average or ideal sun pointing; no attitude dynamics.
-- The simulator has no temperature effects, cell degradation, Earth albedo or battery voltage model (the real-data mode measures some of them). Real 1U
-  CubeSats without deployables typically average about 2 W, a little below the 2.8 W here.
+- Array ageing (2021–2026) rests on one two-week window per year and a single geometric
+  regressor (beta angle); the trend of −0.5 ± 0.4 %/yr is not significant.
+- The simulator has no temperature effects, cell degradation, Earth albedo or battery voltage
+  model (the real-data mode measures some of them). Real 1U CubeSats without deployables
+  typically average about 2 W, a little below the 2.8 W here.
 - Loads are a constant average per mode; no ground-station passes.
 - Safe mode sheds a fixed set of loads; there is no smarter load scheduling.
 - Health monitoring (fault detection, diagnosis, prognosis) is evaluated on synthetic telemetry
@@ -526,6 +550,7 @@ data helps. The health-monitoring layer is that hybrid step. Kalman filters corr
 model with telemetry and estimate its unknown parameters. Machine learning works on the twin's
 residuals and estimates rather than on raw telemetry, which is why it can tell a lost cell string
 from gradual degradation. The real-data mode is the first step on real housekeeping telemetry: the
-physics holds on FUNcube-1, and the filters turned a generic 1U into a twin of that spacecraft. The
-next step is to follow its array factor and battery over months, which is where degradation would
-show.
+physics holds on FUNcube-1, and the filters turned a generic 1U into a twin of that spacecraft.
+Followed over six Novembers, the same filters show that its array changes more with the beta angle
+than with age. The next step is continuous monitoring: following the array factor and the battery
+every week, so that the twin's health layer runs on real telemetry instead of synthetic faults.
