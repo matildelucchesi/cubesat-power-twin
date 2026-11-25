@@ -31,11 +31,9 @@ const wrap = (lon: number) => ((((lon + 180) % 360) + 360) % 360) - 180;
       @if (night(); as n) { <polygon [attr.points]="n" class="night" /> }
       @for (lon of lons; track lon) {
         <line [attr.x1]="x(lon)" [attr.x2]="x(lon)" y1="0" y2="360" class="grid" />
-        <text [attr.x]="x(lon) + 3" y="354" class="tick">{{ lon }}°</text>
       }
       @for (lat of lats; track lat) {
         <line x1="0" x2="720" [attr.y1]="y(lat)" [attr.y2]="y(lat)" class="grid" [class.eq]="lat === 0" />
-        <text x="3" [attr.y]="y(lat) - 3" class="tick">{{ lat }}°</text>
       }
       @for (seg of segments(); track $index) {
         <polyline [attr.points]="seg" class="track" />
@@ -58,6 +56,13 @@ const wrap = (lon: number) => ((((lon + 180) % 360) + 360) % 360) - 180;
           <circle r="5.5" class="sat" [class.dark]="!l.lit" />
         </g>
       }
+      <!-- Axis labels last, with a halo, so the Sun and the track never hide them. -->
+      @for (lon of lons; track lon) {
+        <text [attr.x]="x(lon) + 3" y="354" class="tick">{{ lon }}°</text>
+      }
+      @for (lat of lats; track lat) {
+        <text x="3" [attr.y]="y(lat) - 3" class="tick">{{ lat }}°</text>
+      }
     </svg>
     <div class="legend">
       <span><i class="l-track"></i>First 24 h of the run</span>
@@ -73,7 +78,7 @@ const wrap = (lon: number) => ((((lon + 180) % 360) + 360) % 360) - 180;
     .night { fill: var(--text); opacity: 0.12; }
     .grid { stroke: var(--border); stroke-width: 0.6; }
     .grid.eq { stroke: var(--muted); stroke-dasharray: 3 3; }
-    .tick { font: 10px var(--f-data); fill: var(--muted); }
+    .tick { font: 10px var(--f-data); fill: var(--muted); paint-order: stroke; stroke: var(--panel-2); stroke-width: 3px; stroke-linejoin: round; }
     .track { fill: none; stroke: var(--accent); stroke-width: 0.8; opacity: 0.2; }
     .trail { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; }
     .foot { fill: none; stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 4 3; }

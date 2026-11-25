@@ -36,6 +36,12 @@ class SimulationRequest(BaseModel):
     step_s: int = Field(60, ge=10, le=600, description="Time step [s]")
     attitude: Literal["tumbling", "sun_pointing"] = "tumbling"
     failed_faces: list[Literal["+X", "-X", "+Y", "-Y", "+Z", "-Z"]] = []
+    # Failure scenarios that are not a whole face going dark.
+    face_loss: dict[Literal["+X", "-X", "+Y", "-Y", "+Z", "-Z"], float] = Field(
+        {}, description="Fraction of a face's cells lost, e.g. one string out of two = 0.5")
+    wings_deployed: int = Field(2, ge=0, le=2, description="Deployable wings that opened (of two)")
+    array_degradation: float = Field(0.0, ge=0, le=0.9,
+                                     description="Fraction of output lost on every cell (radiation, ageing)")
     capacity_wh: float = Field(20.0, gt=0, description="Battery capacity [Wh]")
     initial_soc: float = Field(0.8, ge=0, le=1)
     tx_duty_cycle: float = Field(0.5, ge=0, le=1, description="Transmitter on-time fraction")
@@ -71,11 +77,14 @@ def build_config(req: SimulationRequest, tle: Tle) -> dict:
     cfg["simulation"].update(start=start.isoformat(), duration_days=req.days, step_s=req.step_s,
                              eclipse_model=req.eclipse_model)
     cfg["solar_array"]["faces"] = dict(ff["faces"])
-    cfg["solar_array"]["deployable"] = ff["deployable"] if req.deployables else 0.0
+    cfg["solar_array"]["deployable"] = ff["deployable"] * req.wings_deployed / 2 if req.deployables else 0.0
+    cfg["solar_array"]["cell_efficiency"] *= 1 - req.array_degradation
     cfg["solar_array"]["attitude"] = req.attitude
     cfg["loads"] = {**ff["loads"], "radio_tx_duty_cycle": req.tx_duty_cycle}
     cfg["safe_mode"] = {"enabled": req.safe_mode, "enter_soc": req.safe_enter_soc,
                         "exit_soc": req.safe_exit_soc}
+    for face, lost in req.face_loss.items():
+        cfg["solar_array"]["faces"][face] *= 1 - min(max(lost, 0.0), 1.0)
     for face in req.failed_faces:
         cfg["solar_array"]["faces"][face] = 0.0
     cfg["battery"].update(capacity_wh=req.capacity_wh, initial_soc=req.initial_soc)

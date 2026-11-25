@@ -14,6 +14,12 @@ export interface SimulationRequest {
   step_s: number;
   attitude: 'tumbling' | 'sun_pointing';
   failed_faces: Face[];
+  /** Fraction of a face's cells lost (one string of two = 0.5). */
+  face_loss: Partial<Record<Face, number>>;
+  /** Deployable wings that opened, of two. */
+  wings_deployed: number;
+  /** Fraction of output lost on every cell. */
+  array_degradation: number;
   capacity_wh: number;
   initial_soc: number;
   tx_duty_cycle: number;
@@ -50,7 +56,7 @@ export interface Spacecraft {
 }
 
 export interface Catalog {
-  satellites: { norad: number; name: string; orbit: string }[];
+  satellites: { norad: number; name: string; orbit: string; role?: 'reference' | 'what-if'; cubesat?: FormFactor | null }[];
   form_factors: Record<FormFactor, { size_u: number[]; capacity_wh: number; deployable: number }>;
 }
 

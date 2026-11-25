@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from api import app
@@ -34,6 +35,20 @@ def test_failed_faces_reduce_power():
     half = client.post("/api/simulate", json={**base, "failed_faces": ["+X", "-X", "+Y"]}
                        ).json()["summary"]["mean_power_w"]
     assert half < full
+
+
+def test_failure_scenarios_scale_power():
+    base = {"days": 0.5, "step_s": 120, "eclipse_model": "cylindrical"}
+    power = lambda **kw: client.post("/api/simulate", json={**base, **kw}).json()["summary"]["mean_power_w"]
+    full = power()
+    # Radiation degradation scales every cell.
+    assert power(array_degradation=0.2) == pytest.approx(0.8 * full, rel=0.02)
+    # One string of two lost on one face of six (tumbling, 1U): 1/12 of the area.
+    assert power(face_loss={"+X": 0.5}) == pytest.approx(11 / 12 * full, rel=0.02)
+    # A stuck wing removes half of the deployable area.
+    two, one, none = (power(deployables=True, wings_deployed=w) for w in (2, 1, 0))
+    assert none == pytest.approx(full, rel=0.02)
+    assert one == pytest.approx((two + none) / 2, rel=0.02)
 
 
 def test_invalid_request_is_rejected():

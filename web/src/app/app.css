@@ -8,15 +8,25 @@ h1 { margin: 0; font: 800 clamp(22px, 3vw, 32px) / 1.1 var(--f-display); letter-
 .scenario { margin: 6px 0 0; font: 500 15px var(--f-body); color: var(--muted); }
 .meta { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; font: 12px var(--f-data); color: var(--muted); }
 
-.body { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: calc(100vh - 90px); }
-@media (max-width: 900px) { .body { grid-template-columns: 1fr; } }
+.body {
+  display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: calc(100vh - 90px);
+  /* The scenario column's background, drawn on the grid so the column itself can stay sticky. */
+  background: linear-gradient(90deg, var(--panel-2) 249px, var(--border) 249px 250px, transparent 250px);
+}
+@media (max-width: 900px) { .body { grid-template-columns: 1fr; background: none; } }
 
 h2 { margin: 0 0 12px; font: 700 12px var(--f-display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; }
 .cap { margin: 8px 0 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
 
 /* Scenario column */
-.side { display: flex; flex-direction: column; gap: 14px; padding: 20px clamp(16px, 2vw, 22px); background: var(--panel-2); border-right: 1px solid var(--border); }
+.side { display: flex; flex-direction: column; gap: 14px; padding: 20px clamp(16px, 2vw, 22px) 28px; background: var(--panel-2); border-right: 1px solid var(--border); }
+/* On wide screens the controls stay in view while the results scroll. */
+@media (min-width: 901px) {
+  .side { position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto; scrollbar-width: thin; }
+  /* The run button stays reachable even when the controls are taller than the screen. */
+  .side .run { position: sticky; bottom: 0; box-shadow: 0 -12px 12px -2px var(--panel-2); }
+}
 @media (max-width: 900px) { .side { border-right: 0; border-bottom: 1px solid var(--border); } }
 .side label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
 .side label b { color: var(--text); font: 500 12px var(--f-data); }
@@ -56,6 +66,19 @@ main { display: flex; flex-direction: column; gap: 28px; padding: 22px clamp(16p
 .replay-head h2 { margin: 0; }
 .player { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; flex: 1 1 420px; justify-content: flex-end; }
 .player input { flex: 1 1 160px; min-width: 120px; accent-color: var(--accent); }
+/* Replay position drawn as a progress bar: filled up to the current instant (--p). */
+.player input.progress {
+  -webkit-appearance: none; appearance: none; height: 10px; margin: 0; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent) var(--p, 0%), var(--grid) var(--p, 0%));
+}
+.player input.progress::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 4px; height: 18px; border-radius: 2px;
+  background: var(--text); border: 0;
+}
+.player input.progress::-moz-range-thumb { width: 4px; height: 18px; border-radius: 2px; background: var(--text); border: 0; }
+.player input.progress::-moz-range-track { background: transparent; }
+.player .pct { font: 500 12px var(--f-data); color: var(--muted); min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
 .ghost { font: 500 12px var(--f-body); background: var(--panel); color: var(--text); border: 1px solid var(--border); padding: 5px 12px; cursor: pointer; }
 .speed { display: inline-flex; }
 .speed button { font: 500 12px var(--f-data); background: var(--panel); color: var(--text); border: 1px solid var(--border); padding: 5px 9px; cursor: pointer; margin-left: -1px; }
@@ -69,6 +92,8 @@ main { display: flex; flex-direction: column; gap: 28px; padding: 22px clamp(16p
 .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
 @media (max-width: 1000px) { .two { grid-template-columns: 1fr; } }
 
+/* Wide tables scroll inside their own box on small screens instead of widening the page. */
+@media (max-width: 700px) { table { display: block; overflow-x: auto; white-space: nowrap; } }
 table { width: 100%; border-collapse: collapse; font: 13px var(--f-data); background: var(--panel); border: 1px solid var(--border); }
 th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--grid); }
 th { color: var(--muted); font: 600 11px var(--f-body); text-transform: uppercase; letter-spacing: 0.05em; background: var(--panel-2); }
@@ -134,7 +159,12 @@ th { color: var(--muted); font: 600 11px var(--f-body); text-transform: uppercas
 .side .safe-box label:not(.check) { font-size: 12px; }
 .check input#safe { accent-color: var(--accent); }
 .hint.warn { color: var(--danger); }
+.side label b.warn-inline { font: 600 11px var(--f-body); color: #8a5a00; }
 .telemetry .safe-pill { background: var(--danger); color: var(--panel); }
 
-/* View switch in the header */
-.views button { padding: 6px 14px; flex: none; }
+/* View switch in the header: tabs read as navigation, not as data. */
+.views { flex-wrap: wrap; }
+.views button { padding: 7px 16px; flex: none; font: 600 13px var(--f-body); color: var(--muted); }
+.views button:hover { color: var(--text); }
+.views button[aria-pressed='true'] { color: var(--on-accent); }
+@media (max-width: 560px) { .views { width: 100%; } .views button { flex: 1; padding: 7px 8px; } }

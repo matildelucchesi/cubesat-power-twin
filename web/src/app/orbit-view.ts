@@ -92,6 +92,8 @@ export class OrbitView implements AfterViewInit, OnDestroy {
   readonly result = input.required<SimulationResult>();
   readonly failedFaces = input<Face[]>([]);
   readonly attitude = input<'tumbling' | 'sun_pointing'>('tumbling');
+  /** Deployable wings that opened (of two); a stuck one is drawn folded against -Y. */
+  readonly wingsDeployed = input(2);
   /** Canvas elsewhere on the page where the close-up of the CubeSat is drawn. */
   readonly closeupCanvas = input<HTMLCanvasElement | null>(null);
 
@@ -166,8 +168,9 @@ export class OrbitView implements AfterViewInit, OnDestroy {
     effect(() => {
       const sc = this.result().spacecraft;
       const size = sc?.size_u ?? [1, 1, 1];
-      this.buildBody(this.sat, this.cubeMaterials, this.wingMaterial, size, sc?.deployables ?? false, 0.12);
-      this.buildBody(this.insetSat, this.insetMaterials, this.insetWingMaterial, size, sc?.deployables ?? false, 1);
+      const open = this.wingsDeployed();
+      this.buildBody(this.sat, this.cubeMaterials, this.wingMaterial, size, sc?.deployables ?? false, 0.12, open);
+      this.buildBody(this.insetSat, this.insetMaterials, this.insetWingMaterial, size, sc?.deployables ?? false, 1, open);
       this.addFaceLabels(this.insetSat, size, 1);
       this.buildDynamic();
     });
@@ -344,7 +347,7 @@ export class OrbitView implements AfterViewInit, OnDestroy {
    * longest side is `longest`), with two wings along ±Y when deployables are on.
    */
   private buildBody(group: THREE.Group, mats: THREE.Material[], wingMat: THREE.Material,
-                    sizeU: number[], wings: boolean, longest: number): void {
+                    sizeU: number[], wings: boolean, longest: number, open = 2): void {
     group.clear();
     const k = longest / Math.max(...sizeU);
     const [sx, sy, sz] = sizeU.map((u) => u * k);
@@ -355,10 +358,18 @@ export class OrbitView implements AfterViewInit, OnDestroy {
     if (!wings) return;
     const back = new THREE.MeshStandardMaterial({ color: 0xc9d1dc, roughness: 0.8 });
     const w = sy * 1.6;
+    const stuck = new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.6 });
     for (const side of [1, -1]) {
-      // Cells on the +X side of each wing (material group 0), bare back elsewhere.
-      const wing = new THREE.Mesh(new THREE.BoxGeometry(sx * 0.04, w, sz * 0.95), [wingMat, back, back, back, back, back]);
-      wing.position.set(sx / 2, side * (sy / 2 + w / 2 + sy * 0.05), 0);
+      let wing: THREE.Mesh;
+      if (side === -1 && open < 2) {
+        // Stuck wing: still stowed flat against the -Y face, its cells facing the body.
+        wing = new THREE.Mesh(new THREE.BoxGeometry(sx * 0.95, sy * 0.04, sz * 0.95), stuck);
+        wing.position.set(0, -(sy / 2 + sy * 0.03), 0);
+      } else {
+        // Cells on the +X side of each wing (material group 0), bare back elsewhere.
+        wing = new THREE.Mesh(new THREE.BoxGeometry(sx * 0.04, w, sz * 0.95), [wingMat, back, back, back, back, back]);
+        wing.position.set(sx / 2, side * (sy / 2 + w / 2 + sy * 0.05), 0);
+      }
       const outline = new THREE.LineSegments(new THREE.EdgesGeometry(wing.geometry), new THREE.LineBasicMaterial({ color: 0x0f1b2d }));
       outline.position.copy(wing.position);
       group.add(wing, outline);

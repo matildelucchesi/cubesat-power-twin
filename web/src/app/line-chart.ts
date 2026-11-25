@@ -1,4 +1,4 @@
-import { Component, computed, input, signal } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, inject, input, signal } from '@angular/core';
 
 export interface Series {
   label: string;
@@ -138,12 +138,28 @@ export class LineChart {
   /** Visible x range [h]; null shows everything. */
   readonly window = input<[number, number] | null>(null);
 
-  readonly width = 900;
-  readonly height = 250;
+  /**
+   * The SVG is drawn at the pixel width of its container, so text stays at its
+   * real size (no scaling) and the chart keeps a sensible height on any screen.
+   */
+  private readonly hostW = signal(900);
+  get width(): number { return this.hostW(); }
+  get height(): number { return this.hostW() < 560 ? 200 : 240; }
   readonly pad = { left: 46, right: 14, top: 22, bottom: 34 };
-  readonly plotW = this.width - this.pad.left - this.pad.right;
-  readonly plotH = this.height - this.pad.top - this.pad.bottom;
+  get plotW(): number { return this.width - this.pad.left - this.pad.right; }
+  get plotH(): number { return this.height - this.pad.top - this.pad.bottom; }
   readonly boxW = 230;
+
+  constructor() {
+    const host = inject(ElementRef<HTMLElement>).nativeElement as HTMLElement;
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([e]) => {
+      const w = Math.round(e.contentRect.width);
+      if (w > 0 && w !== this.hostW()) this.hostW.set(Math.max(280, w));
+    });
+    ro.observe(host);
+    inject(DestroyRef).onDestroy(() => ro.disconnect());
+  }
 
   readonly hoverX = signal<number | null>(null);
 
@@ -192,7 +208,7 @@ export class LineChart {
   });
   readonly xTicks = computed(() => {
     const [a, b] = this.range();
-    const step = niceStep((b - a) / 7);
+    const step = niceStep((b - a) / Math.max(3, Math.floor(this.width / 120)));
     const ticks: number[] = [];
     for (let t = Math.ceil(a / step) * step; t <= b + 1e-9; t += step) ticks.push(+t.toFixed(2));
     return ticks;
@@ -234,7 +250,7 @@ export class LineChart {
       x: xs[i],
       lit: this.bands()?.[i] ?? null,
       values: this.series().map((s) => ({ label: s.label, value: s.values[i], color: s.color, unit: s.unit ?? '' })),
-      boxX: px + this.boxW + 12 > this.width - this.pad.right ? px - this.boxW - 10 : px + 10,
+      boxX: Math.max(this.pad.left, px + this.boxW + 12 > this.width - this.pad.right ? px - this.boxW - 10 : px + 10),
     };
   });
 
