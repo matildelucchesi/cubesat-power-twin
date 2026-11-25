@@ -42,12 +42,9 @@
         }
       </select>
       @if (selectedPreset(); as s) {
-        @if (s.cubesat) {
-          <span class="hint">{{ s.orbit }}. {{ s.name }} is itself a {{ s.cubesat }} CubeSat, so the size below is set to match it.
-            @if (request.form_factor !== s.cubesat) { <b class="warn-inline">Now {{ request.form_factor }}: a what-if, not {{ s.name }}.</b> }
-          </span>
-        } @else {
-          <span class="hint">{{ s.orbit }}. Only the orbit is used: the spacecraft is the CubeSat chosen below.</span>
+        <span class="hint">{{ s.orbit }}{{ s.cubesat ? '' : ' · orbit only' }}</span>
+        @if (s.cubesat && request.form_factor !== s.cubesat) {
+          <b class="warn-inline">What-if: the real one is {{ s.cubesat }}</b>
         }
       }
     </label>
@@ -103,7 +100,7 @@
       <select id="fault" name="fault" [ngModel]="fault()" (ngModelChange)="setFault($event)">
         @for (f of faultScenarios; track f.id) { <option [value]="f.id">{{ f.label }}</option> }
       </select>
-      <span class="hint">{{ faultHint() }}</span>
+      @if (faultHint()) { <span class="hint">{{ faultHint() }}</span> }
     </label>
 
     <fieldset>
@@ -191,8 +188,10 @@
               <button type="button" class="ghost" (click)="playback.playing.set(!playback.playing())">
                 {{ playback.playing() ? 'Pause' : 'Play' }}
               </button>
-              <input type="range" min="0" [max]="n.last" step="1" [value]="n.i" aria-label="Replay time"
+              <input type="range" class="progress" min="0" [max]="n.last" step="1" [value]="n.i" aria-label="Replay time"
+                     [style.--p]="(100 * n.i / (n.last || 1)) + '%'"
                      (input)="playback.seek($any($event.target).valueAsNumber)" />
+              <span class="pct">{{ (100 * n.i / (n.last || 1)).toFixed(0) }} %</span>
               <span class="speed" role="group" aria-label="Playback speed">
                 @for (rate of rates; track rate) {
                   <button type="button" [attr.aria-pressed]="playback.rate() === rate" (click)="playback.rate.set(rate)">{{ rate }}×</button>

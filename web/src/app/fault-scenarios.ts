@@ -20,36 +20,36 @@ export const NO_FAULT: FaultFields = { failed_faces: [], face_loss: {}, wings_de
  * off at random. 'custom' keeps the per-face check boxes.
  */
 export const FAULT_SCENARIOS: FaultScenario[] = [
-  { id: 'none', label: 'No failure', hint: 'Every cell works as designed.', fields: NO_FAULT },
+  { id: 'none', label: 'No failure', hint: '', fields: NO_FAULT },
   {
     id: 'wing',
     label: 'One deployable wing stuck',
-    hint: 'The hinge or burn wire of one wing fails: half of the deployable area never sees the Sun. A classic CubeSat failure.',
+    hint: 'Half of the deployable area stays folded.',
     fields: { ...NO_FAULT, wings_deployed: 1 },
     needsWings: true,
   },
   {
     id: 'eps',
     label: 'EPS channel lost (±X faces)',
-    hint: 'Opposite faces often share one input of the power system. When that regulator fails, both faces go dark together.',
+    hint: 'Two faces on one regulator go dark together.',
     fields: { ...NO_FAULT, failed_faces: ['+X', '-X'] },
   },
   {
     id: 'string',
     label: 'One string lost on +X',
-    hint: 'Cells are wired in series strings; one open cell or bypass diode takes the whole string out. Here half of the +X face.',
+    hint: 'One open cell takes out its series string: half of +X.',
     fields: { ...NO_FAULT, face_loss: { '+X': 0.5 } },
   },
   {
     id: 'radiation',
     label: 'Radiation degradation (−15 %)',
-    hint: 'Years of trapped protons and electrons slowly lower the output of every cell. No single failure, the whole array weakens.',
+    hint: 'Every cell slowly loses output in orbit.',
     fields: { ...NO_FAULT, array_degradation: 0.15 },
   },
   {
     id: 'custom',
     label: 'Custom: choose failed faces',
-    hint: 'Switch whole faces off by hand.',
+    hint: 'Tick the faces below.',
     fields: NO_FAULT,
   },
 ];
