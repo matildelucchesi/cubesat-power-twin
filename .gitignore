@@ -5,3 +5,4 @@ results/
 
 # TLEs downloaded at runtime (the bundled funcube1.tle stays tracked)
 data/tle/[0-9]*.tle
+data/real/frames/

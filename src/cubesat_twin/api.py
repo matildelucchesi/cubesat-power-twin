@@ -228,3 +228,63 @@ def health_explain(req: ExplainRequest) -> dict:
     base = HealthRequest(**req.model_dump(exclude={"question"}))
     report, what_if = _health(base.key())
     return explain(report, req.question, what_if)
+
+
+@lru_cache(maxsize=1)
+def _real() -> dict:
+    """Twin aligned with FUNcube-1's real telemetry (bundled SatNOGS snapshot)."""
+    from real import capacity_from_slope, run_real, summary as real_summary
+
+    res = run_real()
+    df = res["df"]
+    t0 = df.time.iloc[0]
+    hours = (df.time - t0).dt.total_seconds() / 3600
+    passes = []
+    for seg_id, seg in df.groupby("segment"):
+        passes.append({
+            "id": int(seg_id),
+            "start": seg.time.iloc[0].isoformat(),
+            "minutes": int(len(seg)),
+            "eclipse_minutes": int((~seg.lit_meas).sum()),
+            "validation": bool(seg.v_pred_synced.notna().any()),
+            "i0": int(seg.index[0]),
+            "i1": int(seg.index[-1]) + 1,
+        })
+    capacity_ah = [capacity_from_slope(k, v)[0] if k > 0 else None
+                   for k, v in zip(df.bat_k, df.bat_v_full)]
+
+    def col(name, nd=4):
+        return [None if v != v else round(float(v), nd) for v in df[name]]
+
+    synced = res["synced"]
+    return {
+        "summary": real_summary(res),
+        "passes": passes,
+        "series": {
+            "start": t0.isoformat(),
+            "hours": np.round(hours, 4).tolist(),
+            "p_array_w": col("p_array_w", 3),
+            "p_twin_w": col("p_twin_w", 3),
+            "p_twin_synced_w": np.round(synced.array_factor * df.p_twin_w, 3).tolist(),
+            "p_load_w": col("p_load_w", 3),
+            "v_batt_v": col("v_batt_v"),
+            "v_pred_synced_v": col("v_pred_synced"),
+            "v_pred_datasheet_v": col("v_pred_datasheet"),
+            "lit_meas": df.lit_meas.astype(bool).tolist(),
+            "twin_sunlit": df.twin_sunlit.astype(bool).tolist(),
+            "array_factor": col("array_factor"),
+            "array_factor_sd": col("array_factor_sd"),
+            "battery_r_ohm": col("bat_r"),
+            "battery_capacity_ah": [None if c is None else round(c, 4) for c in capacity_ah],
+            "load_sun_w": col("load_sun_w", 3),
+            "load_eclipse_w": col("load_eclipse_w", 3),
+        },
+    }
+
+
+@app.get("/api/real")
+def real_telemetry() -> dict:
+    """Real-data mode: the twin compared with and synchronised to FUNcube-1's
+    housekeeping telemetry (SatNOGS Network), with the estimated parameters and
+    the validation scores of the prediction."""
+    return _real()
