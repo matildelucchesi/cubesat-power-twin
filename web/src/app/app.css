@@ -8,15 +8,25 @@ h1 { margin: 0; font: 800 clamp(22px, 3vw, 32px) / 1.1 var(--f-display); letter-
 .scenario { margin: 6px 0 0; font: 500 15px var(--f-body); color: var(--muted); }
 .meta { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; font: 12px var(--f-data); color: var(--muted); }
 
-.body { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: calc(100vh - 90px); }
-@media (max-width: 900px) { .body { grid-template-columns: 1fr; } }
+.body {
+  display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: calc(100vh - 90px);
+  /* The scenario column's background, drawn on the grid so the column itself can stay sticky. */
+  background: linear-gradient(90deg, var(--panel-2) 249px, var(--border) 249px 250px, transparent 250px);
+}
+@media (max-width: 900px) { .body { grid-template-columns: 1fr; background: none; } }
 
 h2 { margin: 0 0 12px; font: 700 12px var(--f-display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; }
 .cap { margin: 8px 0 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
 
 /* Scenario column */
-.side { display: flex; flex-direction: column; gap: 14px; padding: 20px clamp(16px, 2vw, 22px); background: var(--panel-2); border-right: 1px solid var(--border); }
+.side { display: flex; flex-direction: column; gap: 14px; padding: 20px clamp(16px, 2vw, 22px) 28px; background: var(--panel-2); border-right: 1px solid var(--border); }
+/* On wide screens the controls stay in view while the results scroll. */
+@media (min-width: 901px) {
+  .side { position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto; scrollbar-width: thin; }
+  /* The run button stays reachable even when the controls are taller than the screen. */
+  .side .run { position: sticky; bottom: 0; box-shadow: 0 -12px 12px -2px var(--panel-2); }
+}
 @media (max-width: 900px) { .side { border-right: 0; border-bottom: 1px solid var(--border); } }
 .side label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
 .side label b { color: var(--text); font: 500 12px var(--f-data); }
@@ -69,6 +79,8 @@ main { display: flex; flex-direction: column; gap: 28px; padding: 22px clamp(16p
 .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
 @media (max-width: 1000px) { .two { grid-template-columns: 1fr; } }
 
+/* Wide tables scroll inside their own box on small screens instead of widening the page. */
+@media (max-width: 700px) { table { display: block; overflow-x: auto; white-space: nowrap; } }
 table { width: 100%; border-collapse: collapse; font: 13px var(--f-data); background: var(--panel); border: 1px solid var(--border); }
 th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--grid); }
 th { color: var(--muted); font: 600 11px var(--f-body); text-transform: uppercase; letter-spacing: 0.05em; background: var(--panel-2); }
@@ -136,5 +148,9 @@ th { color: var(--muted); font: 600 11px var(--f-body); text-transform: uppercas
 .hint.warn { color: var(--danger); }
 .telemetry .safe-pill { background: var(--danger); color: var(--panel); }
 
-/* View switch in the header */
-.views button { padding: 6px 14px; flex: none; }
+/* View switch in the header: tabs read as navigation, not as data. */
+.views { flex-wrap: wrap; }
+.views button { padding: 7px 16px; flex: none; font: 600 13px var(--f-body); color: var(--muted); }
+.views button:hover { color: var(--text); }
+.views button[aria-pressed='true'] { color: var(--on-accent); }
+@media (max-width: 560px) { .views { width: 100%; } .views button { flex: 1; padding: 7px 8px; } }
