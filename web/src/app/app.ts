@@ -10,6 +10,7 @@ import { OrbitPlane } from './orbit-plane';
 import { OrbitView } from './orbit-view';
 import { Playback, RATES } from './playback.service';
 import { Catalog, Face, FormFactor, SimulationRequest, SimulationResult, SimulationService } from './simulation.service';
+import { FAULT_SCENARIOS, NO_FAULT, faultSummary } from './fault-scenarios';
 
 /** One computed result, shown with the relation that produced it and the model used. */
 interface ResultCard {
@@ -55,7 +56,7 @@ export class App {
     days: 3,
     step_s: 60,
     attitude: 'tumbling',
-    failed_faces: [],
+    ...structuredClone(NO_FAULT),
     capacity_wh: 20,
     initial_soc: 0.8,
     tx_duty_cycle: 0.5,
@@ -86,6 +87,8 @@ export class App {
     const s = r.summary;
     const margin = s.mean_power_w - s.mean_load_w;
     const working = 6 - q.failed_faces.length;
+    // Failures other than whole faces (strings, wings, degradation) get their own chip.
+    const partial = faultSummary({ ...q, failed_faces: [] });
     const T = this.periodMin();
     const b = this.baseline()?.result.summary;
     const delta = (now: number, then: number | undefined, unit: string, digits: number, higherIsBetter: boolean | null) => {
@@ -101,7 +104,8 @@ export class App {
           ? `P̄ = S·η·(A${q.deployables ? ' + A_wings' : ''})/4·(1 − f_ecl)`
           : `P̄ = S·η·(A_face${q.deployables ? ' + A_wings' : ''})·(1 − f_ecl)`,
         chips: [{ text: q.attitude === 'tumbling' ? 'tumbling' : 'sun pointing' },
-                { text: `${working}/6 faces`, tone: working < 6 ? 'warn' : undefined }],
+                { text: `${working}/6 faces`, tone: working < 6 ? 'warn' : undefined },
+                ...(partial ? [{ text: partial, tone: 'warn' as const }] : [])],
       },
       {
         label: 'Mean load', value: s.mean_load_w.toFixed(2), unit: 'W',
@@ -238,7 +242,8 @@ export class App {
     const q = this.ran();
     if (!r || !q) return '';
     const parts = [`${q.form_factor}${q.deployables ? ' + wings' : ''} on ${this.orbitName()} orbit`, q.attitude === 'tumbling' ? 'tumbling' : 'sun pointing'];
-    if (q.failed_faces.length) parts.push(`${q.failed_faces.length} failed`);
+    const fault = faultSummary(q);
+    if (fault) parts.push(fault);
     if (q.safe_mode) parts.push('safe mode');
     return parts.join(' · ');
   });
@@ -353,7 +358,26 @@ export class App {
     if (r) this.baseline.set({ label: this.runLabel(), result: r });
   }
 
+  readonly faultScenarios = FAULT_SCENARIOS;
+  /** Selected failure scenario; ticking a face by hand switches to 'custom'. */
+  readonly fault = signal('none');
+  faultHint(): string {
+    return FAULT_SCENARIOS.find((f) => f.id === this.fault())?.hint ?? '';
+  }
+
+  setFault(id: string): void {
+    this.fault.set(id);
+    const sc = FAULT_SCENARIOS.find((f) => f.id === id);
+    if (!sc || id === 'custom') return;
+    Object.assign(this.request, structuredClone(sc.fields));
+    if (sc.needsWings) this.request.deployables = true;
+  }
+
   toggleFace(face: Face, failed: boolean): void {
+    if (this.fault() !== 'custom') {
+      Object.assign(this.request, structuredClone(NO_FAULT));
+      this.fault.set('custom');
+    }
     const set = new Set(this.request.failed_faces);
     failed ? set.add(face) : set.delete(face);
     this.request.failed_faces = [...set];

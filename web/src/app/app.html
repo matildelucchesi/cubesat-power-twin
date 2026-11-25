@@ -99,6 +99,13 @@
       <input id="duty" type="range" name="duty" min="0" max="1" step="0.05" [(ngModel)]="request.tx_duty_cycle" />
     </label>
 
+    <label for="fault">Failure scenario
+      <select id="fault" name="fault" [ngModel]="fault()" (ngModelChange)="setFault($event)">
+        @for (f of faultScenarios; track f.id) { <option [value]="f.id">{{ f.label }}</option> }
+      </select>
+      <span class="hint">{{ faultHint() }}</span>
+    </label>
+
     <fieldset>
       <legend>Failed solar panels</legend>
       @for (face of faces; track face) {
@@ -216,7 +223,8 @@
         <div class="replay">
           <div class="pane">
             <h3>3D view · the CubeSat on its orbit</h3>
-            <app-orbit-view [closeupCanvas]="closeup" [result]="r" [failedFaces]="ran()?.failed_faces ?? []" [attitude]="ran()?.attitude ?? 'tumbling'" />
+            <app-orbit-view [closeupCanvas]="closeup" [result]="r" [failedFaces]="ran()?.failed_faces ?? []" [attitude]="ran()?.attitude ?? 'tumbling'"
+                            [wingsDeployed]="ran()?.wings_deployed ?? 2" />
             <p class="cap">The CubeSat is drawn far larger than scale so its faces can be read.</p>
           </div>
           <div class="col">
