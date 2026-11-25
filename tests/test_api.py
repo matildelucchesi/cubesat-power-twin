@@ -97,3 +97,11 @@ def test_safe_mode_keeps_battery_alive_with_failed_faces():
 def test_safe_thresholds_must_be_ordered():
     r = client.post("/api/simulate", json={"safe_mode": True, "safe_enter_soc": 0.7, "safe_exit_soc": 0.5})
     assert r.status_code == 422
+
+
+def test_real_endpoint():
+    body = client.get("/api/real").json()
+    s = body["summary"]
+    assert s["minutes"] == len(body["series"]["hours"]) > 1000
+    assert any(p["validation"] for p in body["passes"])
+    assert s["v_rmse_synced_mv"] < s["v_rmse_datasheet_mv"]

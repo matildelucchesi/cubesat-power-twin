@@ -12,7 +12,15 @@ asks every day: **will the battery hold?** To answer it, the twin:
 5. optionally runs an on-board safe mode that switches loads off when the battery runs low;
 6. keeps itself synchronised with telemetry, estimates what no sensor measures, detects and
    diagnoses faults, forecasts when the battery will reach safe mode and compares corrective
-   actions ([health monitoring](#health-monitoring-from-simulator-to-digital-twin)).
+   actions ([health monitoring](#health-monitoring-from-simulator-to-digital-twin));
+7. is checked against a real spacecraft: the telemetry that **FUNcube-1 (AO-73)** sent from
+   orbit, received by SatNOGS ground stations
+   ([real-data mode](#real-data-mode-the-twin-aligned-with-funcube-1)).
+
+The program has two modes. The **simulated** mode (Power simulation and Health monitoring
+views) flies a configurable CubeSat and generates its own telemetry. The **real-data** mode
+(Real telemetry view, `real.py`) compares the twin with FUNcube-1's housekeeping data and
+synchronises it.
 
 A Python core does the physics, a FastAPI backend exposes it, and an Angular dashboard with a
 Three.js 3D view lets you run what-if scenarios: a different CubeSat size, deployable solar
@@ -25,6 +33,7 @@ panels, failed panels, another orbit, safe mode on or off.
 - [The physics, step by step](#the-physics-step-by-step)
 - [Results](#results)
 - [Health monitoring: from simulator to digital twin](#health-monitoring-from-simulator-to-digital-twin)
+- [Real-data mode: the twin aligned with FUNcube-1](#real-data-mode-the-twin-aligned-with-funcube-1)
 - [Using it as a study tool](#using-it-as-a-study-tool)
 - [Software architecture](#software-architecture)
 - [Run it](#run-it)
@@ -269,6 +278,149 @@ health check starts a new conversation.
 
 ![Operator assistant chat](docs/health-assistant.png)
 
+## Real-data mode: the twin aligned with FUNcube-1
+
+Everything above runs on synthetic telemetry: the twin can only show that it recovers parameters
+we invented. This mode answers the harder question: **does the twin match a real spacecraft in
+orbit, and what can it learn about it?**
+
+### The data
+
+[FUNcube-1 (AO-73)](https://funcube.org.uk/) is a 1U CubeSat built by AMSAT-UK and AMSAT-NL,
+launched in November 2013 and still transmitting. It is the default orbit of the simulated mode.
+Every 5 seconds it sends a 256-byte telemetry frame on 145.935 MHz (BPSK). Twelve of the 24 frame
+types carry the **whole-orbit buffer**: one sample per minute for the last 104 minutes. A ground
+station that hears a 10-minute pass therefore receives the whole previous orbit, eclipse included.
+
+[SatNOGS Network](https://network.satnogs.org), the open network of amateur ground stations run by
+the Libre Space Foundation, publishes the demodulated frames of every pass. No account or token
+is needed. (The SatNOGS DB telemetry API needs a token and has no decoder for FUNcube-1, so the raw
+frames are used instead.)
+
+- `funcube.py` decodes the frames: bit-packed fields, following the FUNcube telemetry format as
+  implemented in [gr-satellites](https://github.com/daniestevez/gr-satellites).
+- `satnogs.py` downloads the frames of a date range, rebuilds the whole-orbit buffer of each pass,
+  aligns overlapping passes from different stations and writes `data/real/funcube1_wholeorbit.csv`.
+- The bundled snapshot covers **10 to 25 November 2026**: 5,338 frames from 116 passes, merged into
+  **7,973 minutes** of telemetry in 204 contiguous stretches.
+
+Per minute it gives the voltage of the X, Y and Z solar panels, the total array current, the battery
+voltage, the system current and some temperatures. Both currents are measured on the battery bus,
+so array power = bus voltage × array current, load power = bus voltage × system current.
+
+### How the twin is aligned
+
+| Step | What is compared or estimated | How | Result |
+| --- | --- | --- | --- |
+| Eclipses | 155 eclipse entries and exits in the telemetry (array current through half its sunlit level) against the shadow crossings predicted from the TLE | median difference = clock offset of the whole-orbit samples, applied from then on | offset −21 s, scatter ±30 s with 1-minute samples; sun/shadow agree on **99.2 %** of the minutes; eclipse 19.1 min measured vs 18.7 min predicted |
+| Solar array | measured over as-designed array power, in sunlight away from eclipse edges | scalar Kalman filter (random walk) | **array factor 0.77 ± 0.004**: 2.68 W measured vs 3.51 W for the generic 1U in sunlight |
+| Loads | system power in sunlight and in eclipse | two Kalman filters | 1.72 W in sunlight, **1.15 W in eclipse** (the telemetry beacon is off in the dark); the twin assumed 1.70 W always |
+| Battery | voltage against the charge drawn | Kalman filter on [V_full, k, R], see below | full-charge voltage 7.88 V, **R = 0.31 Ω**, k = 2.6 V/Ah, **capacity ≈ 610 mAh** with a typical Li-ion curve |
+
+**The battery model had to change.** FUNcube-1's power system stops charging at a fixed voltage
+(about 7.88 V) and dumps the surplus, so the battery is full for most of the orbit, and its voltage
+only moves during eclipse and recharge. The state is the **charge deficit** $D$ [Ah] below full,
+from coulomb counting of the measured currents (reset to 0 when the voltage sits at the charger
+limit in sunlight). The voltage is
+
+$$V = V_{full} - k\,D + R\,I$$
+
+and a Kalman filter estimates $V_{full}$ (slow random walk: it moves with temperature), $k$ (volts
+lost per ampere-hour drawn) and $R$ (internal resistance). None of them is measured on board. If the
+cells follow the twin's typical Li-ion open-circuit curve, $k$ gives the capacity
+($C = \frac{dV_{oc}/dSOC}{k}$). The deepest eclipse draws 53 mAh, under 10 % of that capacity.
+
+### Validation: predicting the battery from the orbit alone
+
+The filters are run on **10–17 November** (calibration). The synchronised twin then predicts
+**18–25 November** with no telemetry at all except the first voltage of each pass: sunlight and
+array power come from the TLE, the loads and battery from the estimated parameters. The same
+prediction with the generic datasheet twin (19.2 Wh, as-designed array, constant 1.7 W, battery free
+to charge up to 8.4 V) is the baseline.
+
+| On 17 passes, 2,447 minutes not used for calibration | Generic twin | Synchronised twin |
+| --- | --- | --- |
+| Battery voltage, RMS error | 163 mV | **34 mV** |
+| Lowest voltage of each eclipse, mean error (15 eclipses) | 154 mV | **32 mV** |
+| Array power in sunlight, RMS error | 0.92 W | 0.42 W |
+
+![Twin vs real telemetry](docs/real-vs-twin.png)
+
+What remains in the array power error is attitude: FUNcube-1's array power swings by about ±15 %
+minute to minute as it rotates, and the twin only models the orbit average. The voltage residual is
+mostly the 10 mV resolution of the telemetry and temperature effects the model leaves out.
+
+What this says about the twin:
+
+- **Orbit and eclipses are right.** SGP4 plus a cylindrical shadow predicts every eclipse within
+  the 1-minute resolution of the data, and gets its length to 25 seconds (the cylinder ignores the
+  penumbra, so real eclipses look slightly longer).
+- **The generic spacecraft is not FUNcube-1**, and the data says how. The generic twin overestimates
+  the array by 30 % (its cell area and attitude are not FUNcube-1's, plus 13 years of ageing), and its
+  battery model misses the charge limit: in sunlight it keeps charging up to 8.4 V while the real
+  battery stays at 7.88 V.
+- **Fifteen days are too short to see ageing.** The array factor is flat over the period (0.77 ±
+  0.004), so the twin cannot separate design differences from degradation. The next section repeats
+  the measurement over six years.
+
+In the dashboard, the **Real telemetry · FUNcube-1** view shows these checks, the estimates and,
+for any pass, the real telemetry against both twins.
+
+![Real telemetry view](docs/real-telemetry.png)
+
+### Array ageing over six years (2021–2026)
+
+FUNcube-1 was launched in November 2013. SatNOGS keeps decoded frames from 2021 onwards (older
+passes are archived only as audio), so `degradation.py` repeats the measurement on the same dates,
+**10–25 November of every year from 2021 to 2026**, and fits a trend. Using the same calendar dates
+keeps the Earth–Sun distance nearly the same each year, and what is left is divided out by the
+irradiance of the day.
+
+Method:
+
+1. **Daily array power.** The side-panel temperatures were added to the decoder, and every
+   whole-orbit minute with the array in sunlight was used, except the 2 minutes around each eclipse
+   edge. Each minute gives P = V_batt · I_array, and the minutes of each UTC day are averaged. Attitude
+   makes single minutes swing by ±15 %, and whole days smooth that out. The repository keeps these
+   daily aggregates (`data/real/funcube1_history_daily.csv`): 89 days and about 23,000 sunlit
+   minutes.
+2. **One value per year.** Each year's value is the median of its daily array factors (measured
+   divided by as-designed). Its uncertainty comes from the day-to-day scatter.
+3. **Kalman trend.** A filter on [level, rate per year, beta coefficient] takes in one year at a
+   time. The beta angle, the angle between the Sun and the orbit plane, comes from each year's TLE
+   (`funcube1_history_tles.txt`). A systematic floor is added to each year's variance until
+   χ²/dof = 1.
+
+| November | 2021 | 2022 | 2023 | 2024 | 2025 | 2026 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Array factor (median) | 0.768 | 0.821 | 0.810 | 0.818 | 0.790 | 0.767 |
+| Beta angle | 65° | 55° | 48° | 45° | 51° | 62° |
+| Days with data | 10 | 14 | 15 | 15 | 6 | 15 |
+
+![Array degradation](docs/array-degradation.png)
+
+What the data says:
+
+- **The beta angle, not age, drives the year-to-year changes.** The array gives 0.34 ± 0.10 % less
+  per degree of beta. 2021 and 2026, at similar beta (65° and 62°), have the same factor. The years
+  near 45–55° are the highest.
+- **Degradation is −0.5 ± 0.4 % per year**, or about −2.6 % in five years (±4.2 % at 2σ). This is
+  not significant: the data rules out losses faster than about 1.4 %/yr, but cannot tell a small
+  loss from none. Typical triple-junction GaAs in LEO loses 0.5–1 %/yr, which is consistent with
+  the result.
+- **Leaving out beta gives the wrong answer.** A plain straight line gives −0.3 ± 0.8 %/yr, with a
+  scatter twice as large.
+- **Panel temperature is not a usable correction here.** Within each year, days with warmer panels
+  have *more* power (about +1 %/°C), the opposite of the cell coefficient (−0.25 %/°C). The side
+  panels are warm when they are in the sun, so their temperature measures illumination, not cell
+  efficiency. With the textbook 25 °C correction the rate would be −0.64 %/yr. It is reported only
+  as a sensitivity check.
+
+Limits: there is one two-week window per year, and 2025 has only 6 days. Beta is the only geometric
+regressor, and attitude changes between years would look the same. The data before 2021, which
+would cover the steepest early ageing, is not in SatNOGS.
+
+
 ## Using it as a study tool
 
 The dashboard is built to compare scenarios, not to show a single case.
@@ -305,7 +457,9 @@ The dashboard is built to compare scenarios, not to show a single case.
 | Prognosis | `prognosis.py` | Monte Carlo forecast of the time to safe mode, duty-cycle study |
 | Health | `health.py`, `health_benchmark.py` | End-to-end pipeline and benchmark on labelled runs |
 | Assistant | `assistant.py` | Claude explains the health report, with the twin's what-if as a tool |
-| API | `api.py` | FastAPI: `/api/simulate`, `/api/catalog`, `/api/config`, `/api/health`, `/api/health/explain`, `/api/health/benchmark`; OpenAPI docs at `/docs` |
+| Real data | `funcube.py`, `satnogs.py`, `real.py` | FUNcube-1 frame decoder, SatNOGS Network download, twin vs real telemetry: eclipse timing, Kalman filters, validation |
+| Ageing | `degradation.py` | Array factor per year 2021–2026, Kalman trend with beta-angle regressor |
+| API | `api.py` | FastAPI: `/api/simulate`, `/api/catalog`, `/api/config`, `/api/health`, `/api/health/explain`, `/api/health/benchmark`, `/api/real`; OpenAPI docs at `/docs` |
 | Dashboard | `web/` | Angular (signals), hand-drawn SVG charts, Three.js 3D view |
 
 All code is in `src/cubesat_twin/`, the tests in `tests/` (unit tests for each block and API
@@ -327,6 +481,11 @@ python docs/make_figures.py                # README figures
 
 python src/cubesat_twin/health_benchmark.py 60       # train the diagnosis model, score the four methods
 python src/cubesat_twin/health.py array_degradation  # one fault end to end: alarms, estimates, prognosis
+
+python src/cubesat_twin/real.py                       # real-data mode: twin vs FUNcube-1, docs/real-vs-twin.png
+python src/cubesat_twin/satnogs.py --since 2026-11-10 # refresh the telemetry from SatNOGS (needs internet)
+python src/cubesat_twin/degradation.py                # array ageing 2021-2026, docs/array-degradation.png
+python src/cubesat_twin/satnogs.py --since 2023-11-10 --until 2023-11-26 --out data/real/2023  # one past year
 ```
 
 Dashboard (two terminals):
@@ -343,14 +502,18 @@ cd web && npm install && npx ng serve                  # http://localhost:4200
 
 - Spacecraft parameters are representative of commercial CubeSat parts, not of one mission.
 - Attitude is either a tumbling average or ideal sun pointing; no attitude dynamics.
-- No temperature effects, cell degradation, Earth albedo or battery voltage model. Real 1U
+- The simulator has no temperature effects, cell degradation, Earth albedo or battery voltage model (the real-data mode measures some of them). Real 1U
   CubeSats without deployables typically average about 2 W, a little below the 2.8 W here.
 - Loads are a constant average per mode; no ground-station passes.
 - Safe mode sheds a fixed set of loads; there is no smarter load scheduling.
-- Health monitoring is evaluated on synthetic telemetry from a truth model, not on real
-  housekeeping data. The truth model is richer than the twin, but simpler than a real spacecraft
+- Health monitoring (fault detection, diagnosis, prognosis) is evaluated on synthetic telemetry
+  from a truth model; the real-data mode checks the twin itself on FUNcube-1, which had no fault in
+  the period. The truth model is richer than the twin, but simpler than a real spacecraft
   (no temperature, no battery ageing within a day, no telemetry gaps). The faults are accelerated
   so that they show within days.
+- Real-data mode: whole-orbit samples are 1 minute apart with 10 mV and 1 mA resolution; the battery
+  capacity depends on the assumed open-circuit curve, since FUNcube-1's cell datasheet was not used;
+  the clock offset is estimated, not known.
 - The prognosis assumes a linear trend of the degradation it has seen; a fault that starts after
   the last telemetry sample is not foreseen.
 
@@ -362,5 +525,7 @@ The uncertain parts (cell temperature, degradation, real attitude and consumptio
 data helps. The health-monitoring layer is that hybrid step. Kalman filters correct the physical
 model with telemetry and estimate its unknown parameters. Machine learning works on the twin's
 residuals and estimates rather than on raw telemetry, which is why it can tell a lost cell string
-from gradual degradation. The next step is to run the same pipeline on real CubeSat housekeeping
-telemetry.
+from gradual degradation. The real-data mode is the first step on real housekeeping telemetry: the
+physics holds on FUNcube-1, and the filters turned a generic 1U into a twin of that spacecraft. The
+next step is to follow its array factor and battery over months, which is where degradation would
+show.
