@@ -7,6 +7,7 @@
   <div class="seg views" role="tablist" aria-label="View">
     <button type="button" role="tab" [attr.aria-pressed]="view() === 'power'" (click)="view.set('power')">Power simulation</button>
     <button type="button" role="tab" [attr.aria-pressed]="view() === 'health'" (click)="view.set('health')">Health monitoring</button>
+    <button type="button" role="tab" [attr.aria-pressed]="view() === 'real'" (click)="view.set('real')">Real telemetry · FUNcube-1</button>
   </div>
   <p class="meta">
     <span>Orbit from TLE · SGP4</span>
@@ -16,6 +17,8 @@
 
 @if (view() === 'health') {
 <app-health-panel />
+} @else if (view() === 'real') {
+<app-real-panel />
 } @else {
 <div class="body">
   <form class="side" (ngSubmit)="run()">
