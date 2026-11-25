@@ -13,11 +13,16 @@ CACHE_DIR = Path("data/tle")
 BUNDLED = {39444: CACHE_DIR / "funcube1.tle"}
 MAX_AGE_S = 24 * 3600  # CelesTrak updates element sets a few times a day
 
-# Real orbits with clearly different inclinations, to compare eclipse seasons.
+# FUNcube-1 is the reference: a real 1U CubeSat whose telemetry the twin is checked against.
+# The other entries are what-if orbits with clearly different inclinations, to compare
+# eclipse seasons; only their orbit is used ("cubesat" is None: they are not CubeSats).
 PRESETS = [
-    {"norad": 39444, "name": "FUNcube-1 (AO-73)", "orbit": "Sun-synchronous, 97.8°"},
-    {"norad": 25544, "name": "ISS", "orbit": "51.6°, where ISS-deployed CubeSats start"},
-    {"norad": 20580, "name": "Hubble Space Telescope", "orbit": "Low inclination, 28.5°"},
+    {"norad": 39444, "name": "FUNcube-1 (AO-73)", "orbit": "Sun-synchronous, 97.8°",
+     "role": "reference", "cubesat": "1U"},
+    {"norad": 25544, "name": "ISS", "orbit": "51.6°, where ISS-deployed CubeSats start",
+     "role": "what-if", "cubesat": None},
+    {"norad": 20580, "name": "Hubble Space Telescope", "orbit": "Low inclination, 28.5°",
+     "role": "what-if", "cubesat": None},
 ]
 
 

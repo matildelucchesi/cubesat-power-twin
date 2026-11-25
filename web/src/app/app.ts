@@ -337,7 +337,15 @@ export class App {
     } else {
       this.orbitMode.set('preset');
       this.request.norad = Number(value);
+      // A real CubeSat (FUNcube-1) brings its own size; the user can still change it as a what-if.
+      const sat = this.catalog()?.satellites.find((s) => s.norad === this.request.norad);
+      if (sat?.cubesat) this.setFormFactor(sat.cubesat);
     }
+  }
+
+  /** The preset orbit currently selected, if any. */
+  selectedPreset() {
+    return this.orbitMode() === 'preset' ? this.catalog()?.satellites.find((s) => s.norad === this.request.norad) : undefined;
   }
 
   saveBaseline(): void {

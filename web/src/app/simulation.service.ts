@@ -50,7 +50,7 @@ export interface Spacecraft {
 }
 
 export interface Catalog {
-  satellites: { norad: number; name: string; orbit: string }[];
+  satellites: { norad: number; name: string; orbit: string; role?: 'reference' | 'what-if'; cubesat?: FormFactor | null }[];
   form_factors: Record<FormFactor, { size_u: number[]; capacity_wh: number; deployable: number }>;
 }
 

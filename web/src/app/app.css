@@ -146,6 +146,7 @@ th { color: var(--muted); font: 600 11px var(--f-body); text-transform: uppercas
 .side .safe-box label:not(.check) { font-size: 12px; }
 .check input#safe { accent-color: var(--accent); }
 .hint.warn { color: var(--danger); }
+.side .hint b.warn-inline { display: block; margin-top: 3px; font: 600 11px var(--f-body); color: #8a5a00; }
 .telemetry .safe-pill { background: var(--danger); color: var(--panel); }
 
 /* View switch in the header: tabs read as navigation, not as data. */

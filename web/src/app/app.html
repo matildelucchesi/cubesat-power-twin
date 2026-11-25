@@ -24,14 +24,30 @@
     <label for="orbit">Fly the orbit of
       <select id="orbit" name="orbit" [ngModel]="orbitMode() === 'custom' ? 'custom' : '' + request.norad"
               (ngModelChange)="setOrbit($event)">
-        @for (s of catalog()?.satellites ?? [{ norad: 39444, name: 'FUNcube-1 (AO-73)', orbit: '' }]; track s.norad) {
-          <option [value]="'' + s.norad">{{ s.name }}</option>
+        @if (catalog(); as cat) {
+          <optgroup label="Reference: real CubeSat">
+            @for (s of cat.satellites; track s.norad) {
+              @if (s.role !== 'what-if') { <option [value]="'' + s.norad">{{ s.name }}{{ s.cubesat ? ' · ' + s.cubesat : '' }}</option> }
+            }
+          </optgroup>
+          <optgroup label="What-if orbits">
+            @for (s of cat.satellites; track s.norad) {
+              @if (s.role === 'what-if') { <option [value]="'' + s.norad">{{ s.name }}</option> }
+            }
+            <option value="custom">Other NORAD number…</option>
+          </optgroup>
+        } @else {
+          <option value="39444">FUNcube-1 (AO-73) · 1U</option>
+          <option value="custom">Other NORAD number…</option>
         }
-        <option value="custom">Other NORAD number…</option>
       </select>
-      @if (orbitMode() === 'preset') {
-        @for (s of catalog()?.satellites ?? []; track s.norad) {
-          @if (s.norad === request.norad) { <span class="hint">{{ s.orbit }}. Only the orbit is used.</span> }
+      @if (selectedPreset(); as s) {
+        @if (s.cubesat) {
+          <span class="hint">{{ s.orbit }}. {{ s.name }} is itself a {{ s.cubesat }} CubeSat, so the size below is set to match it.
+            @if (request.form_factor !== s.cubesat) { <b class="warn-inline">Now {{ request.form_factor }}: a what-if, not {{ s.name }}.</b> }
+          </span>
+        } @else {
+          <span class="hint">{{ s.orbit }}. Only the orbit is used: the spacecraft is the CubeSat chosen below.</span>
         }
       }
     </label>
