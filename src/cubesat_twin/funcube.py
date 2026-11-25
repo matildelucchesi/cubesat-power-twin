@@ -31,7 +31,8 @@ FRAME_PERIOD_S = 5
 SATID_FC1FM = 2                # flight model of FUNcube-1
 
 WO_FIELDS = ("photovoltage_x_mv", "photovoltage_y_mv", "photovoltage_z_mv",
-             "photocurrent_ma", "battery_mv", "system_ma", "temp_black_chassis_raw")
+             "photocurrent_ma", "battery_mv", "system_ma", "temp_black_chassis_raw",
+             "temp_xp_raw", "temp_xm_raw", "temp_yp_raw", "temp_ym_raw")
 RT_FIELDS = ("photovoltage_x_mv", "photovoltage_y_mv", "photovoltage_z_mv",
              "photocurrent_ma", "battery_mv", "system_ma", "eclipse", "safemode",
              "battery_temp_raw")
@@ -96,6 +97,11 @@ def wo_samples(frame: Frame) -> list[tuple[int, dict]]:
         s = frame.payload[i * WO_SAMPLE_LEN - start:(i + 1) * WO_SAMPLE_LEN - start]
         out.append((i, {
             "temp_black_chassis_raw": bits(s, 0, 12),
+            # Side-panel temperatures (raw 10-bit), after the four 12-bit chassis/panel ones.
+            "temp_xp_raw": bits(s, 48, 10),
+            "temp_xm_raw": bits(s, 58, 10),
+            "temp_yp_raw": bits(s, 68, 10),
+            "temp_ym_raw": bits(s, 78, 10),
             "photovoltage_x_mv": bits(s, 88, 16),
             "photovoltage_y_mv": bits(s, 104, 16),
             "photovoltage_z_mv": bits(s, 120, 16),

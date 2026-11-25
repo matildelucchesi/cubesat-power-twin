@@ -360,13 +360,66 @@ What this says about the twin:
   battery model misses the charge limit: in sunlight it keeps charging up to 8.4 V while the real
   battery stays at 7.88 V.
 - **Fifteen days are too short to see ageing.** The array factor is flat over the period (0.77 ±
-  0.004), so the twin cannot separate design differences from degradation. Following it over months
-  would.
+  0.004), so the twin cannot separate design differences from degradation. The next section repeats
+  the measurement over six years.
 
 In the dashboard, the **Real telemetry · FUNcube-1** view shows these checks, the estimates and,
 for any pass, the real telemetry against both twins.
 
 ![Real telemetry view](docs/real-telemetry.png)
+
+### Array ageing over six years (2021–2026)
+
+FUNcube-1 was launched in November 2013. SatNOGS keeps decoded frames from 2021 onwards (older
+passes are archived only as audio), so `degradation.py` repeats the measurement on the same dates,
+**10–25 November of every year from 2021 to 2026**, and fits a trend. Using the same calendar dates
+keeps the Earth–Sun distance nearly the same each year, and what is left is divided out by the
+irradiance of the day.
+
+Method:
+
+1. **Daily array power.** The side-panel temperatures were added to the decoder, and every
+   whole-orbit minute with the array in sunlight was used, except the 2 minutes around each eclipse
+   edge. Each minute gives P = V_batt · I_array, and the minutes of each UTC day are averaged. Attitude
+   makes single minutes swing by ±15 %, and whole days smooth that out. The repository keeps these
+   daily aggregates (`data/real/funcube1_history_daily.csv`): 89 days and about 23,000 sunlit
+   minutes.
+2. **One value per year.** Each year's value is the median of its daily array factors (measured
+   divided by as-designed). Its uncertainty comes from the day-to-day scatter.
+3. **Kalman trend.** A filter on [level, rate per year, beta coefficient] takes in one year at a
+   time. The beta angle, the angle between the Sun and the orbit plane, comes from each year's TLE
+   (`funcube1_history_tles.txt`). A systematic floor is added to each year's variance until
+   χ²/dof = 1.
+
+| November | 2021 | 2022 | 2023 | 2024 | 2025 | 2026 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Array factor (median) | 0.768 | 0.821 | 0.810 | 0.818 | 0.790 | 0.767 |
+| Beta angle | 65° | 55° | 48° | 45° | 51° | 62° |
+| Days with data | 10 | 14 | 15 | 15 | 6 | 15 |
+
+![Array degradation](docs/array-degradation.png)
+
+What the data says:
+
+- **The beta angle, not age, drives the year-to-year changes.** The array gives 0.34 ± 0.10 % less
+  per degree of beta. 2021 and 2026, at similar beta (65° and 62°), have the same factor. The years
+  near 45–55° are the highest.
+- **Degradation is −0.5 ± 0.4 % per year**, or about −2.6 % in five years (±4.2 % at 2σ). This is
+  not significant: the data rules out losses faster than about 1.4 %/yr, but cannot tell a small
+  loss from none. Typical triple-junction GaAs in LEO loses 0.5–1 %/yr, which is consistent with
+  the result.
+- **Leaving out beta gives the wrong answer.** A plain straight line gives −0.3 ± 0.8 %/yr, with a
+  scatter twice as large.
+- **Panel temperature is not a usable correction here.** Within each year, days with warmer panels
+  have *more* power (about +1 %/°C), the opposite of the cell coefficient (−0.25 %/°C). The side
+  panels are warm when they are in the sun, so their temperature measures illumination, not cell
+  efficiency. With the textbook 25 °C correction the rate would be −0.64 %/yr. It is reported only
+  as a sensitivity check.
+
+Limits: there is one two-week window per year, and 2025 has only 6 days. Beta is the only geometric
+regressor, and attitude changes between years would look the same. The data before 2021, which
+would cover the steepest early ageing, is not in SatNOGS.
+
 
 ## Using it as a study tool
 
@@ -405,6 +458,7 @@ The dashboard is built to compare scenarios, not to show a single case.
 | Health | `health.py`, `health_benchmark.py` | End-to-end pipeline and benchmark on labelled runs |
 | Assistant | `assistant.py` | Claude explains the health report, with the twin's what-if as a tool |
 | Real data | `funcube.py`, `satnogs.py`, `real.py` | FUNcube-1 frame decoder, SatNOGS Network download, twin vs real telemetry: eclipse timing, Kalman filters, validation |
+| Ageing | `degradation.py` | Array factor per year 2021–2026, Kalman trend with beta-angle regressor |
 | API | `api.py` | FastAPI: `/api/simulate`, `/api/catalog`, `/api/config`, `/api/health`, `/api/health/explain`, `/api/health/benchmark`, `/api/real`; OpenAPI docs at `/docs` |
 | Dashboard | `web/` | Angular (signals), hand-drawn SVG charts, Three.js 3D view |
 
@@ -430,6 +484,8 @@ python src/cubesat_twin/health.py array_degradation  # one fault end to end: ala
 
 python src/cubesat_twin/real.py                       # real-data mode: twin vs FUNcube-1, docs/real-vs-twin.png
 python src/cubesat_twin/satnogs.py --since 2026-11-10 # refresh the telemetry from SatNOGS (needs internet)
+python src/cubesat_twin/degradation.py                # array ageing 2021-2026, docs/array-degradation.png
+python src/cubesat_twin/satnogs.py --since 2023-11-10 --until 2023-11-26 --out data/real/2023  # one past year
 ```
 
 Dashboard (two terminals):
@@ -446,7 +502,7 @@ cd web && npm install && npx ng serve                  # http://localhost:4200
 
 - Spacecraft parameters are representative of commercial CubeSat parts, not of one mission.
 - Attitude is either a tumbling average or ideal sun pointing; no attitude dynamics.
-- No temperature effects, cell degradation, Earth albedo or battery voltage model. Real 1U
+- The simulator has no temperature effects, cell degradation, Earth albedo or battery voltage model (the real-data mode measures some of them). Real 1U
   CubeSats without deployables typically average about 2 W, a little below the 2.8 W here.
 - Loads are a constant average per mode; no ground-station passes.
 - Safe mode sheds a fixed set of loads; there is no smarter load scheduling.

@@ -22,6 +22,7 @@ import csv
 import json
 import re
 import time
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,15 +34,27 @@ HEADERS = {"User-Agent": "cubesat-power-twin"}
 TIME_IN_NAME = re.compile(r"(\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d)")
 
 
-def _get(url: str, timeout: float = 30) -> tuple[bytes, str]:
+def _get(url: str, timeout: float = 30, max_wait_s: float = 3600) -> tuple[bytes, str]:
+    """GET with the API's rate limit respected: on HTTP 429 wait as long as
+    the Retry-After header asks (the API throttles bursts of page requests)."""
     req = urllib.request.Request(url, headers=HEADERS)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read(), r.headers.get("Link", "")
+    while True:
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read(), r.headers.get("Link", "")
+        except urllib.error.HTTPError as e:
+            wait = float(e.headers.get("Retry-After", 60)) if e.code == 429 else None
+            if wait is None or wait > max_wait_s:
+                raise
+            print(f"rate limited, waiting {wait:.0f} s")
+            time.sleep(wait + 1)
 
 
-def observations(norad: int, since: str) -> list[dict]:
-    """Observations with demodulated data, newest first, back to `since` (ISO date)."""
-    url, out = API.format(norad=norad), []
+def observations(norad: int, since: str, until: str | None = None) -> list[dict]:
+    """Observations with demodulated data, newest first, from `since` to `until` (ISO dates)."""
+    url, out = API.format(norad=norad) + f"&status=good&start={since}T00:00:00Z", []
+    if until:
+        url += f"&end={until}T00:00:00Z"
     while url:
         body, link = _get(url)
         page = json.loads(body)
@@ -50,7 +63,7 @@ def observations(norad: int, since: str) -> list[dict]:
             break
         m = re.search(r'<([^>]+)>;\s*rel="next"', link)
         url = m.group(1) if m else None
-        time.sleep(0.3)  # be gentle with a volunteer-run service
+        time.sleep(2)  # be gentle with a volunteer-run service (it throttles bursts)
     return [o for o in out if o["start"] >= since]
 
 
@@ -127,10 +140,11 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     p.add_argument("--norad", type=int, default=39444)
     p.add_argument("--since", required=True, help="ISO date, e.g. 2026-11-10")
+    p.add_argument("--until", default=None, help="ISO date (exclusive), default: now")
     p.add_argument("--out", default="data/real")
     p.add_argument("--cache", default="data/real/frames")
     a = p.parse_args()
-    obs = observations(a.norad, a.since)
+    obs = observations(a.norad, a.since, a.until)
     frames = download_frames(obs, Path(a.cache))
     paths = write_csvs(frames, Path(a.out))
     print(f"{len(obs)} observations, {len(frames)} frames -> {paths[0]}, {paths[1]}")
