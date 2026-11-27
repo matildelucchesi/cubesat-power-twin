@@ -9,17 +9,24 @@ with the commands in [§ 8](#8-how-to-reproduce).
 
 The twin is built around one operational question: **will the battery hold?**
 
-The project grew out of my
-[satellite-simulation](https://github.com/matildelucchesi/satellite-simulation) project for the
-Laboratory of Automatic Control exam, which simulates a satellite in orbit including its
-eclipses. Once the eclipses were there, the natural next question was what they do to the
-battery: how much energy is lost in the dark, whether sunlight brings it back, and what
-happens when something fails.
+I needed this twin for two reasons.
 
-A simulator starts from datasheet values. I wanted a model that stays aligned with the
-spacecraft's data and can say something about its state *now*: whether the battery will reach
-safe mode, how soon, and which action (for example a lower transmitter duty cycle) keeps it
-out of it. That is the step from simulator to digital twin.
+The first is the project I have started for the **Laboratory of Automatic Control** exam, where
+I will work on the attitude control of a CubeSat. A twin of the power system is the ground that
+project stands on, so I built it first.
+
+The second is where the interest in the battery comes from. In my satellite simulator, which
+simulates the migration of the TeraFlow SDN controller in a Starlink constellation of two
+orbits, the controller has to be migrated before the satellite enters the Earth's shadow. That
+made me ask what happens to the battery in the dark: the satellite does not switch off in
+eclipse, so it has to live on what it stored in sunlight. I wanted to see how a battery really
+behaves in that situation, and possibly use the answer to make that simulator more complete
+in the future.
+
+From there the step to a digital twin was natural. A simulator starts from datasheet values; a
+twin stays aligned with the spacecraft's data and can say something about its state *now*:
+whether the battery will reach safe mode, how soon, and which action (for example a lower
+transmitter duty cycle) keeps it out of it.
 
 ## 2. Scope
 
