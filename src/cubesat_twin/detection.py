@@ -170,26 +170,29 @@ def cusum(z: np.ndarray, k: float = CUSUM_K) -> np.ndarray:
     return g
 
 
-def cusum_check(f: dict) -> list[Alarm]:
+def cusum_check(f: dict, k: float = CUSUM_K, h: float = CUSUM_H,
+                floor: dict | None = None) -> list[Alarm]:
     """CUSUM on the twin's parameter drifts since the calibration period.
     Each drift is divided by the filter's own standard deviation, with a
     floor for model error, so that a drift counts only when it is larger
     than what the twin can resolve. Low array factor, low capacity and high
-    load bias are the directions that matter."""
+    load bias are the directions that matter. k, h and floor default to
+    CUSUM_K, CUSUM_H and CUSUM_FLOOR (cusum_sensitivity.py varies them)."""
+    floor = CUSUM_FLOOR if floor is None else floor
     calib, after = f["calibration"], f["end_h"] > CALIBRATION_H[1]
     channels = {
-        "array": (-f["array_dev"], f["array_sd"], CUSUM_FLOOR["array"]),
-        "battery": (-f["capacity_dev"], f["capacity_sd"], CUSUM_FLOOR["battery"]),
+        "array": (-f["array_dev"], f["array_sd"], floor["array"]),
+        "battery": (-f["capacity_dev"], f["capacity_sd"], floor["battery"]),
         "loads": (f["load_bias"] - f["load_bias"][:, calib].mean(axis=1, keepdims=True),
-                  f["load_bias_sd"], CUSUM_FLOOR["loads"]),
+                  f["load_bias_sd"], floor["loads"]),
     }
     stats = {}
-    for name, (x, sd, floor) in channels.items():
-        z = np.where(after, x / np.sqrt(sd ** 2 + floor ** 2), 0.0)
-        stats[name] = cusum(z)
+    for name, (x, sd, fl) in channels.items():
+        z = np.where(after, x / np.sqrt(sd ** 2 + fl ** 2), 0.0)
+        stats[name] = cusum(z, k)
     out = []
     for s in range(f["array_dev"].shape[0]):
-        hits = [(np.argmax(g[s] > CUSUM_H), name) for name, g in stats.items() if (g[s] > CUSUM_H).any()]
+        hits = [(np.argmax(g[s] > h), name) for name, g in stats.items() if (g[s] > h).any()]
         if not hits:
             out.append(Alarm("twin_cusum", None, "none"))
             continue

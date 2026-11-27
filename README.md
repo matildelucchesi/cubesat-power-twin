@@ -477,7 +477,7 @@ The dashboard is built to compare scenarios, not to show a single case.
 | Estimation | `estimation.py` | EKF for SOC and capacity, Kalman filters for array factor and load bias |
 | Detection | `detection.py` | Limit checks, CUSUM on twin drifts, random-forest diagnosis, hybrid |
 | Prognosis | `prognosis.py` | Monte Carlo forecast of the time to safe mode, duty-cycle study |
-| Health | `health.py`, `health_benchmark.py` | End-to-end pipeline and benchmark on labelled runs |
+| Health | `health.py`, `health_benchmark.py`, `cusum_sensitivity.py` | End-to-end pipeline, benchmark on labelled runs, CUSUM parameter sensitivity |
 | Assistant | `assistant.py` | Claude explains the health report, with the twin's what-if as a tool |
 | Real data | `funcube.py`, `satnogs.py`, `real.py` | FUNcube-1 frame decoder, SatNOGS Network download, twin vs real telemetry: eclipse timing, Kalman filters, validation |
 | Ageing | `degradation.py` | Array factor per year 2021–2026, Kalman trend with beta-angle regressor |
@@ -502,6 +502,7 @@ python src/cubesat_twin/eclipse.py         # skyfield vs cylindrical eclipse mod
 python docs/make_figures.py                # README figures
 
 python src/cubesat_twin/health_benchmark.py 60       # train the diagnosis model, score the four methods
+python src/cubesat_twin/cusum_sensitivity.py 60      # CUSUM detection and false alarms against k, h, floor
 python src/cubesat_twin/health.py array_degradation  # one fault end to end: alarms, estimates, prognosis
 
 python src/cubesat_twin/real.py                       # real-data mode: twin vs FUNcube-1, docs/real-vs-twin.png
@@ -558,15 +559,17 @@ every week, so that the twin's health layer runs on real telemetry instead of sy
 
 ## How this was built
 
-I designed the twin: the physical models, the fault scenarios, the detection approach and the
-validation strategy. The design notes, the alternatives I set aside and the limits of each result
-are in [DESIGN.md](DESIGN.md).
+I defined what the twin had to answer and how it would be checked: the operational question,
+the fault scenarios, the comparison against classic limit checking and the validation on a real
+spacecraft. The design choices, their trade-offs and the limits of each result are in
+[DESIGN.md](DESIGN.md).
 
 I wrote the code together with an AI coding agent, Claude Code (its commits are marked as
-co-authored in the history). My part in that loop was
-**[TODO (Matilde): e.g. specifying each component, reviewing the generated code, writing or
-checking the tests, and comparing the results against the physics and against real telemetry.
-Keep only what is true, and add any other agent you used]**.
+co-authored in the history). My part in that loop was to give the specifications for each
+component, review the generated code and the tests, and orchestrate the workflow: deciding
+what to build next, in which order, and when a result was good enough to move on. Some
+implementation details, such as the CUSUM parameters, were proposed by the agent; DESIGN.md
+says where, and how they were checked afterwards.
 
 The main check on the result is external: the twin was calibrated and tested on real FUNcube-1
 telemetry, decoded with the project's own decoder (`funcube.py`). On a week not used for
