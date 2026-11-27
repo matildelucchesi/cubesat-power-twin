@@ -32,14 +32,19 @@ another orbit, safe mode on or off.
 
 ## Why I built it
 
-This digital twin started from my project for the **Laboratory of Automatic Control** exam,
-[satellite-simulation](https://github.com/matildelucchesi/satellite-simulation). That project
-simulates a satellite in orbit, including when it enters the Earth's shadow. Once eclipses were
-there, I was curious about what they mean for the battery. How much energy is lost in the dark,
-does the battery recover in sunlight, and what happens when something fails? So I developed the
-project in that direction. I took the orbit and the eclipses as the starting point and built the
-power system on top of them: solar array, loads, battery and safe mode. Then I made it a digital
-twin, synchronised with telemetry, with fault detection, and checked against a real CubeSat.
+I needed this twin for the project I have started for the **Laboratory of Automatic Control**
+exam, on the attitude control of a CubeSat: a model of the power system is the ground that
+project stands on, so I built it first.
+
+The interest in the battery comes from another project of mine, a simulator of the migration of
+the TeraFlow SDN controller in a Starlink constellation. There the controller has to be migrated
+before the satellite enters the Earth's shadow, which made me ask what happens to the battery in
+the dark: the satellite does not switch off in eclipse, so it lives on what it stored in
+sunlight. I wanted to see how a battery really behaves in that situation. So I started from the
+orbit and the eclipses and built the power system on top of them: solar array, loads, battery
+and safe mode. Then I made it a digital twin, synchronised with telemetry, with fault detection,
+and checked against a real CubeSat. More on the reasons behind each choice in
+[DESIGN.md](DESIGN.md).
 
 ## Contents
 
