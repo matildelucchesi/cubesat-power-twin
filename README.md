@@ -171,7 +171,7 @@ Seven days on FUNcube-1's orbit, 1U CubeSat with body-mounted cells, tumbling:
 | Nominal | 2.8 W | 1.7 W | never below 80 % |
 | Three of six panels failed | 1.4 W | 1.7 W | empty after about 2 days |
 | Four of six panels failed | 0.93 W | 1.7 W | empty after about 20 hours |
-| Three failed, safe mode on | 1.4 W | 1.38 W | minimum 39 %; in safe mode 64 % of the week |
+| Three failed, safe mode on | 1.4 W | 1.38 W | minimum 39 %; in safe mode 64 % of the week (38.4 % and 63 % with the cylindrical shadow) |
 
 Safe mode turns a battery that would die into one that survives, at the cost of the transmitter
 being off most of the time. That is the trade-off an operator has to judge.

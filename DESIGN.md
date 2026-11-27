@@ -331,8 +331,9 @@ within days.
   observed in the period, so on real data the twin's models and filters are validated, not
   its detection and diagnosis.
 - **Safe-mode result is simulated.** With 3 of 6 panels failed and safe mode on, the battery
-  minimum is 38.4 % with the cylindrical (simplified) shadow model; the README table rounds a
-  run to 39 %. Either way it is a simulation result, not a measured value.
+  minimum is 39 % with the default DE421 shadow (64 % of the week in safe mode) and 38.4 % with
+  the cylindrical shadow (63 %), as in the README table. Either way it is a simulation result,
+  not a measured value.
 - **Real-data battery capacity depends on an assumed OCV curve**, since FUNcube-1's cell
   datasheet was not used; the clock offset is estimated, not known; samples are 1 minute
   apart with 10 mV and 1 mA resolution.
