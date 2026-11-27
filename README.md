@@ -32,14 +32,19 @@ another orbit, safe mode on or off.
 
 ## Why I built it
 
-This digital twin started from my project for the **Laboratory of Automatic Control** exam,
-[satellite-simulation](https://github.com/matildelucchesi/satellite-simulation). That project
-simulates a satellite in orbit, including when it enters the Earth's shadow. Once eclipses were
-there, I was curious about what they mean for the battery. How much energy is lost in the dark,
-does the battery recover in sunlight, and what happens when something fails? So I developed the
-project in that direction. I took the orbit and the eclipses as the starting point and built the
-power system on top of them: solar array, loads, battery and safe mode. Then I made it a digital
-twin, synchronised with telemetry, with fault detection, and checked against a real CubeSat.
+I needed this twin for the project I have started for the **Laboratory of Automatic Control**
+exam, on the attitude control of a CubeSat: a model of the power system is the ground that
+project stands on, so I built it first.
+
+The interest in the battery comes from another project of mine, a simulator of the migration of
+the TeraFlow SDN controller in a Starlink constellation. There the controller has to be migrated
+before the satellite enters the Earth's shadow, which made me ask what happens to the battery in
+the dark: the satellite does not switch off in eclipse, so it lives on what it stored in
+sunlight. I wanted to see how a battery really behaves in that situation. So I started from the
+orbit and the eclipses and built the power system on top of them: solar array, loads, battery
+and safe mode. Then I made it a digital twin, synchronised with telemetry, with fault detection,
+and checked against a real CubeSat. More on the reasons behind each choice in
+[DESIGN.md](DESIGN.md).
 
 ## Contents
 
@@ -53,6 +58,7 @@ twin, synchronised with telemetry, with fault detection, and checked against a r
 - [Run it](#run-it)
 - [Model limits](#model-limits)
 - [Physics or machine learning?](#physics-or-machine-learning)
+- [How this was built](#how-this-was-built) · design notes in [DESIGN.md](DESIGN.md)
 
 ## The physics, step by step
 
@@ -165,7 +171,7 @@ Seven days on FUNcube-1's orbit, 1U CubeSat with body-mounted cells, tumbling:
 | Nominal | 2.8 W | 1.7 W | never below 80 % |
 | Three of six panels failed | 1.4 W | 1.7 W | empty after about 2 days |
 | Four of six panels failed | 0.93 W | 1.7 W | empty after about 20 hours |
-| Three failed, safe mode on | 1.4 W | 1.38 W | minimum 39 %; in safe mode 64 % of the week |
+| Three failed, safe mode on | 1.4 W | 1.38 W | minimum 39 %; in safe mode 64 % of the week (38.4 % and 63 % with the cylindrical shadow) |
 
 Safe mode turns a battery that would die into one that survives, at the cost of the transmitter
 being off most of the time. That is the trade-off an operator has to judge.
@@ -476,7 +482,7 @@ The dashboard is built to compare scenarios, not to show a single case.
 | Estimation | `estimation.py` | EKF for SOC and capacity, Kalman filters for array factor and load bias |
 | Detection | `detection.py` | Limit checks, CUSUM on twin drifts, random-forest diagnosis, hybrid |
 | Prognosis | `prognosis.py` | Monte Carlo forecast of the time to safe mode, duty-cycle study |
-| Health | `health.py`, `health_benchmark.py` | End-to-end pipeline and benchmark on labelled runs |
+| Health | `health.py`, `health_benchmark.py`, `cusum_sensitivity.py` | End-to-end pipeline, benchmark on labelled runs, CUSUM parameter sensitivity |
 | Assistant | `assistant.py` | Claude explains the health report, with the twin's what-if as a tool |
 | Real data | `funcube.py`, `satnogs.py`, `real.py` | FUNcube-1 frame decoder, SatNOGS Network download, twin vs real telemetry: eclipse timing, Kalman filters, validation |
 | Ageing | `degradation.py` | Array factor per year 2021–2026, Kalman trend with beta-angle regressor |
@@ -501,6 +507,7 @@ python src/cubesat_twin/eclipse.py         # skyfield vs cylindrical eclipse mod
 python docs/make_figures.py                # README figures
 
 python src/cubesat_twin/health_benchmark.py 60       # train the diagnosis model, score the four methods
+python src/cubesat_twin/cusum_sensitivity.py 60      # CUSUM detection and false alarms against k, h, floor
 python src/cubesat_twin/health.py array_degradation  # one fault end to end: alarms, estimates, prognosis
 
 python src/cubesat_twin/real.py                       # real-data mode: twin vs FUNcube-1, docs/real-vs-twin.png
@@ -554,3 +561,26 @@ physics holds on FUNcube-1, and the filters turned a generic 1U into a twin of t
 Followed over six Novembers, the same filters show that its array changes more with the beta angle
 than with age. The next step is continuous monitoring: following the array factor and the battery
 every week, so that the twin's health layer runs on real telemetry instead of synthetic faults.
+
+## How this was built
+
+I defined what the twin had to answer and how it would be checked: the operational question,
+the fault scenarios, the comparison against classic limit checking and the validation on a real
+spacecraft. The design choices, their trade-offs and the limits of each result are in
+[DESIGN.md](DESIGN.md).
+
+I wrote the code together with an AI coding agent, Claude Code (its commits are marked as
+co-authored in the history). My part in that loop was to give the specifications for each
+component, review the generated code and the tests, and orchestrate the workflow: deciding
+what to build next, in which order, and when a result was good enough to move on. Some
+implementation details, such as the CUSUM parameters, were proposed by the agent; DESIGN.md
+says where, and how they were checked afterwards.
+
+The main check on the result is external: the twin was calibrated and tested on real FUNcube-1
+telemetry, decoded with the project's own decoder (`funcube.py`). On a week not used for
+calibration it predicts the battery voltage with 34 mV RMS error, against 163 mV for a generic
+datasheet model.
+
+**Known limitations** are listed in [DESIGN.md § Limitations](DESIGN.md#6-limitations). The most
+important is that the fault-detection benchmark uses faults injected into the project's own
+simulator.
