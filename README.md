@@ -53,6 +53,7 @@ twin, synchronised with telemetry, with fault detection, and checked against a r
 - [Run it](#run-it)
 - [Model limits](#model-limits)
 - [Physics or machine learning?](#physics-or-machine-learning)
+- [How this was built](#how-this-was-built) · design notes in [DESIGN.md](DESIGN.md)
 
 ## The physics, step by step
 
@@ -554,3 +555,24 @@ physics holds on FUNcube-1, and the filters turned a generic 1U into a twin of t
 Followed over six Novembers, the same filters show that its array changes more with the beta angle
 than with age. The next step is continuous monitoring: following the array factor and the battery
 every week, so that the twin's health layer runs on real telemetry instead of synthetic faults.
+
+## How this was built
+
+I designed the twin: the physical models, the fault scenarios, the detection approach and the
+validation strategy. The design notes, the alternatives I set aside and the limits of each result
+are in [DESIGN.md](DESIGN.md).
+
+I wrote the code together with an AI coding agent, Claude Code (its commits are marked as
+co-authored in the history). My part in that loop was
+**[TODO (Matilde): e.g. specifying each component, reviewing the generated code, writing or
+checking the tests, and comparing the results against the physics and against real telemetry.
+Keep only what is true, and add any other agent you used]**.
+
+The main check on the result is external: the twin was calibrated and tested on real FUNcube-1
+telemetry, decoded with the project's own decoder (`funcube.py`). On a week not used for
+calibration it predicts the battery voltage with 34 mV RMS error, against 163 mV for a generic
+datasheet model.
+
+**Known limitations** are listed in [DESIGN.md § Limitations](DESIGN.md#6-limitations). The most
+important is that the fault-detection benchmark uses faults injected into the project's own
+simulator.
